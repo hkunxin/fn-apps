@@ -565,10 +565,102 @@ def _human_size(size: int) -> str:
     return "%d B" % size
 
 
-def job_key(name: Any, task_id: Any) -> str:
-    """上报用的稳定 job_key：`rclone-<id>-<slug>`。
+def normalize_config(config: Any) -> Dict[str, Any]:
+    """把用户提交的配置收敛成**只含已知字段**的规范形态，用于落库。
+
+    未知字段直接丢弃（前端可能带着 UI 专用键），空值一律省略——存一堆 `""` 会让
+    「没设」和「设成空」在界面上分不清。
+    """
+    if not isinstance(config, dict):
+        raise ConfigError("invalid_config", "rclone 配置必须是对象")
+
+    cleaned: Dict[str, Any] = {
+        "mode": _text(config.get("mode")).lower(),
+        "source": validate_source(config.get("source")),
+        "dest": _text(config.get("dest")),
+    }
+    validate_dest(cleaned["dest"])
+
+    bwlimit = _text(config.get("bwlimit"))
+    if bwlimit:
+        cleaned["bwlimit"] = _validate_bwlimit(bwlimit)
+
+    for key, code, label in (
+        ("transfers", "invalid_transfers", "并发传输数"),
+        ("checkers", "invalid_checkers", "校验并发数"),
+    ):
+        if config.get(key) not in (None, ""):
+            cleaned[key] = _validate_int(config.get(key), code, label, 1, 64)
+
+    exclude = _validate_patterns(config.get("exclude"), "invalid_exclude", "排除规则")
+    if exclude:
+        cleaned["exclude"] = exclude
+    include = _validate_patterns(config.get("include"), "invalid_include", "包含规则")
+    if include:
+        cleaned["include"] = include
+
+    max_age = _validate_max_age(config.get("max_age"))
+    if max_age:
+        cleaned["max_age"] = max_age
+    min_size = _validate_min_size(config.get("min_size"))
+    if min_size:
+        cleaned["min_size"] = min_size
+
+    if config.get("links") not in (None, ""):
+        cleaned["links"] = _validate_links(config.get("links"))
+
+    backup_dir = _text(config.get("backup_dir"))
+    if backup_dir:
+        cleaned["backup_dir"] = validate_backup_dir(backup_dir)
+
+    cleaned["dry_run"] = bool(config.get("dry_run"))
+    return cleaned
+
+
+def classify_probe(exit_code: Optional[int], output: str) -> Dict[str, Any]:
+    """把 `rclone lsd` 的结果翻译成「保存前自检」能显示的原因（R4）。
+
+    区分的粒度只到「用户能据此采取行动」：
+    认证失败让他去重配 remote，连不上让他查网络/地址，路径不存在让他改路径。
+    """
+    text = (output or "")
+    lowered = text.lower()
+
+    if exit_code == 0:
+        return {"ok": True, "code": "ok", "message": "远端可访问"}
+
+    if re.search(r"didn't find section in config file|did not find section|unknown backend", lowered):
+        return {
+            "ok": False,
+            "code": "remote_not_found",
+            "message": "这个 remote 在本机 rclone 配置里不存在",
+        }
+    if re.search(r"403|401|unauthor|forbidden|invalid_grant|token|credential|login", lowered):
+        return {
+            "ok": False,
+            "code": "auth_failed",
+            "message": "认证失败：remote 的凭据可能已过期，请重新配置 rclone",
+        }
+    if re.search(r"directory not found|no such file|not found", lowered):
+        return {"ok": False, "code": "path_not_found", "message": "目标路径不存在"}
+    if re.search(
+        r"no such host|dial tcp|connection refused|i/o timeout|timeout|network is unreachable",
+        lowered,
+    ):
+        return {"ok": False, "code": "unreachable", "message": "连不上远端：检查网络或地址"}
+    if exit_code == 3:
+        return {"ok": False, "code": "path_not_found", "message": "目标路径不存在"}
+    return {
+        "ok": False,
+        "code": "unknown",
+        "message": text.strip().splitlines()[-1][:200] if text.strip() else "自检失败（无输出）",
+    }
+
+
+def job_key(name: Any, task_id: Any, prefix: str = "rclone") -> str:
+    """上报用的稳定 job_key：`<prefix>-<id>-<slug>`。
 
     用任务 id 打头而不是名字：名字改了 job_key 不该变，否则历史会被拆成两个 job。
     """
     slug = re.sub(r"[^a-z0-9]+", "-", _text(name).lower()).strip("-")[:32]
-    return "rclone-%s%s" % (int(task_id), ("-" + slug) if slug else "")
+    return "%s-%s%s" % (prefix, int(task_id), ("-" + slug) if slug else "")
