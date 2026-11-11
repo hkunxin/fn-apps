@@ -156,6 +156,12 @@ def probe_capabilities(
 # ---------------------------------------------------------------- remote
 
 
+# rclone 日志行：`2026/11/11 22:57:17 NOTICE: ...`
+_RCLONE_LOG_LINE = re.compile(r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}")
+# remote 类型：只认简单标识符
+_REMOTE_TYPE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
 def parse_remotes(list_output: str) -> List[Dict[str, str]]:
     """解析 `rclone listremotes --long`。
 
@@ -171,6 +177,12 @@ def parse_remotes(list_output: str) -> List[Dict[str, str]]:
         line = raw.strip()
         if not line:
             continue
+        # rclone 把日志也写进同一个流（`_run_rclone` 合并了 stderr），
+        # 形如 `2026/11/11 22:57:17 NOTICE: Config file ... not found`。
+        # 不排除的话，这行会被当成 `name="2026/11/11 22", type="57:17"` 的一条 remote
+        # ——本机没有 rclone.conf 时必然出现（实测）。
+        if _RCLONE_LOG_LINE.match(line):
+            continue
         if ":" not in line:
             continue
         name, _, rest = line.partition(":")
@@ -178,6 +190,9 @@ def parse_remotes(list_output: str) -> List[Dict[str, str]]:
         if not name:
             continue
         kind = rest.strip().split()[0] if rest.strip() else ""
+        # 类型名只可能是简单词（local / s3 / onedrive …），带非法字符就说明这不是 remote 行
+        if kind and not _REMOTE_TYPE.match(kind):
+            continue
         remotes.append({"name": name, "type": kind})
     return remotes
 

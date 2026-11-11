@@ -339,5 +339,35 @@ class SummaryAndHelpersTest(unittest.TestCase):
         self.assertEqual(rclone.job_key("照片备份-改名", 42), "rclone-42")
 
 
+class ParseRemotesLogNoiseTest(unittest.TestCase):
+    """rclone 的日志行不能被当成 remote。
+
+    实测：本机没有 rclone.conf 时，`rclone listremotes --long` 会先打一行
+    `2026/11/11 22:57:17 NOTICE: Config file ... not found`；`_run_rclone` 合并了
+    stderr，于是这行被解析成 name="2026/11/11 22"、type="57:17" 的假 remote。
+    """
+
+    def test_notice_line_is_not_a_remote(self):
+        output = (
+            '2026/11/11 22:57:17 NOTICE: Config file "/root/.config/rclone/rclone.conf" '
+            "not found - using defaults\n"
+        )
+        self.assertEqual(rclone.parse_remotes(output), [])
+
+    def test_real_remotes_still_parse(self):
+        output = "onedrive:      onedrive\nmy smb share:  smb\n"
+        self.assertEqual(
+            rclone.parse_remotes(output),
+            [{"name": "onedrive", "type": "onedrive"}, {"name": "my smb share", "type": "smb"}],
+        )
+
+    def test_mixed_log_and_remotes(self):
+        output = (
+            "2026/11/11 22:57:17 NOTICE: Config file not found - using defaults\n"
+            "nas:  sftp\n"
+        )
+        self.assertEqual(rclone.parse_remotes(output), [{"name": "nas", "type": "sftp"}])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

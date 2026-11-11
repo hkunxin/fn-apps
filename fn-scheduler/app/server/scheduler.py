@@ -2159,6 +2159,10 @@ class TaskRunner(threading.Thread):
         mode = self.settings.report_mode
         if mode == REPORT_OFF or REPORTER is None:
             return
+        # 没配 HA 地址/令牌时直接不排队：否则全新安装上每跑一次任务就积一条永远发不出去的
+        # 事件，队列只增不减（实测升级后 pending 立刻变 1）。用户之后配上令牌，只管往后的事件。
+        if not REPORTER.configured():
+            return
         if mode == REPORT_FAIL and status in ("success", "dry_run", "skipped"):
             return
         row = self.db.get_result_row(result_id)
@@ -3775,12 +3779,20 @@ def main():
     parser.add_argument("--db", required=True)
     parser.add_argument("--settings", required=True)
     parser.add_argument("--base-path", default="/")
-    parser.add_argument("--www-root", required=True)
+    # 不设必填：fnOS 应用中心拉起本应用时只传 socket/db/settings 三个参数，
+    # 把 www-root 做成必填会让「从应用中心启动」直接失败（实测 error: the following
+    # arguments are required: --www-root）。默认取 server 同级的 www/，与本应用的安装
+    # 布局一致；显式传入仍然优先。
+    parser.add_argument("--www-root", default=None)
     args = parser.parse_args()
 
     db_path = str(Path(strip_wrapping_quotes(args.db)))
     settings_path = str(Path(strip_wrapping_quotes(args.settings)))
-    www_root = str(Path(strip_wrapping_quotes(args.www_root)))
+    www_root = str(
+        Path(strip_wrapping_quotes(args.www_root))
+        if args.www_root
+        else Path(__file__).resolve().parent.parent / "www"
+    )
     normalized_base = normalize_base_path(args.base_path)
     socket_path = Path(strip_wrapping_quotes(args.unix_socket))
     instance_lock = acquire_instance_lock(socket_path)
