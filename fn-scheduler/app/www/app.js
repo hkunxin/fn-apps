@@ -2097,9 +2097,10 @@ function applyDestToForm(dest) {
 
 function collectRcloneConfig() {
   const remote = (elements.rcloneRemote?.value || "").trim();
-  const path = (elements.rcloneDestPath?.value || "")
-    .trim()
-    .replace(/^\/+/, "");
+  // 不要去掉前导 `/`：对 local / sftp 这类后端，`remote:/vol1/x` 是绝对路径，
+  // `remote:vol1/x` 是相对路径，两者指向完全不同的位置（实测被静默改成相对路径）。
+  // rclone 对云盘会自行忽略多余的前导斜杠，所以保留用户原样输入是安全的一侧。
+  const path = (elements.rcloneDestPath?.value || "").trim();
   const config = {
     mode: elements.rcloneMode?.value || RCLONE_DEFAULT_MODE,
     source: (elements.rcloneSource?.value || "").trim(),

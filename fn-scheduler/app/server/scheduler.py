@@ -3504,7 +3504,12 @@ def list_remotes():
         json_response({"ok": False, "remotes": [], "rclone": detail, "message": output})
         return
     remotes = rclone_mod.parse_remotes(output)
-    message = "" if remotes else "还没有配置任何 remote：先在 NAS 上执行 sudo rclone config 添加一个"
+    # 提示必须写清「用哪个账号」：任务是以任务里选定的账号执行的，
+    # `sudo rclone config` 会把配置写到 root 下，而任务跑起来照样找不到（实测）。
+    message = "" if remotes else (
+        "还没有配置任何 remote：请在 NAS 上用这个任务选定的账号执行 rclone config 添加"
+        "（不要加 sudo，否则配置会写到 root 下，任务执行时读不到）"
+    )
     json_response(
         {
             "ok": True,
