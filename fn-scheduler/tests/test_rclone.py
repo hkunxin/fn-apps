@@ -369,5 +369,239 @@ class ParseRemotesLogNoiseTest(unittest.TestCase):
         self.assertEqual(rclone.parse_remotes(output), [{"name": "nas", "type": "sftp"}])
 
 
+
+PROGRESS_SAMPLE = """2026/11/11 23:44:49 NOTICE: Config file "/home/hkx/.config/rclone/rclone.conf" not found - using defaults
+2026/11/11 23:44:50 NOTICE: 
+Transferred:  	   20.117 MiB / 238.419 MiB, 8%, 20.086 MiB/s, ETA 10s
+Transferred:            0 / 2, 0%
+Elapsed time:         1.0s
+Transferring:
+ *                                      big1.bin:  5% /190.735Mi, 10.026Mi/s, 18s
+ *                                      big2.bin: 21% /47.684Mi, 0/s, -
+
+2026/11/11 23:44:54 NOTICE: 
+Transferred:  	  100.024 MiB / 238.419 MiB, 42%, 20.022 MiB/s, ETA 6s
+Transferred:            1 / 2, 50%
+Elapsed time:         5.0s
+Transferring:
+ *                                      big1.bin: 27% /190.735Mi, 10.007Mi/s, 13s
+
+2026/11/11 23:44:55 NOTICE: big1.bin: Copied (new)
+2026/11/11 23:44:56 NOTICE: 
+Transferred:  	  238.419 MiB / 238.419 MiB, 100%, 0 B/s, ETA -
+Transferred:            2 / 2, 100%
+Elapsed time:        11.0s
+"""
+
+
+class ProgressParsingTest(unittest.TestCase):
+    """R16：运行中进度。样本取自 fnOS 上一次真实的 238 MiB copy（`--stats 1s`）。"""
+
+    def test_midflight_snapshot(self):
+        mid = PROGRESS_SAMPLE.split("2026/11/11 23:44:55")[0]
+        progress = rclone.parse_progress(mid)
+        self.assertEqual(progress["percent"], 42)
+        self.assertEqual(progress["files_done"], 1)
+        self.assertEqual(progress["files_total"], 2)
+        self.assertEqual(progress["current_file"], "big1.bin")
+        self.assertEqual(progress["current_percent"], 27)
+        self.assertEqual(progress["elapsed_seconds"], 5.0)
+        # 短格式 `Mi`（**不带 B**）必须能换算，否则字节数全变 None
+        self.assertEqual(progress["bytes_total"], int(238.419 * 1024 ** 2))
+        self.assertEqual(progress["bytes_done"], int(100.024 * 1024 ** 2))
+
+    def test_finished_block_has_no_current_file(self):
+        progress = rclone.parse_progress(PROGRESS_SAMPLE)
+        self.assertEqual(progress["percent"], 100)
+        self.assertEqual(progress["files_done"], 2)
+        # 传输结束的块里没有 `Transferring:` 段，此时不该再显示文件名
+        self.assertIsNone(progress["current_file"])
+
+    def test_notice_only_returns_none(self):
+        self.assertIsNone(rclone.parse_progress("2026/11/11 23:44:49 NOTICE: hello"))
+        self.assertIsNone(rclone.parse_progress(""))
+        self.assertIsNone(rclone.parse_progress(None))
+
+    def test_check_mode_without_byte_line_returns_none(self):
+        # check 模式只打 `Checks: n / m`，没有字节行；此时宁可返回 None，
+        # 也不要用 0% 骗界面（0% 和「刚启动还不知道」是两回事）
+        text = "Elapsed time: 0.1s\nChecks:                 2 / 2, 100%\n"
+        self.assertIsNone(rclone.parse_progress(text))
+
+    def test_fold_keeps_only_last_block(self):
+        log, block = rclone.fold_stats_stream(PROGRESS_SAMPLE.splitlines())
+        self.assertNotIn("20.117 MiB", log)
+        self.assertNotIn("42%", log)
+        self.assertIn("238.419 MiB", "\n".join(block))
+        self.assertEqual(len(block), 3)
+
+    def test_fold_keeps_normal_notice_lines(self):
+        log, _block = rclone.fold_stats_stream(PROGRESS_SAMPLE.splitlines())
+        self.assertIn("big1.bin: Copied (new)", log)
+        self.assertIn("not found - using defaults", log)
+
+    def test_folded_log_still_parses_stats(self):
+        log, block = rclone.fold_stats_stream(PROGRESS_SAMPLE.splitlines())
+        stats = rclone.parse_stats(log + "\n" + "\n".join(block))
+        self.assertEqual(stats["files"], 2)
+        self.assertEqual(stats["errors"], 0)
+        self.assertEqual(stats["elapsed_seconds"], 11.0)
+
+    def test_fold_keeps_block_even_with_trailing_blank_line(self):
+        """真机踩过的坑：rclone 输出最后一块后面还跟着空行。
+
+        原实现只在「块未结束」时返回累积内容，遇到末尾空行就把整块丢掉了，
+        结果是任务成功但 stats 全变成 null、日志也空（2026-11-12 实测）。
+        """
+        lines = [
+            "2026/11/12 00:05:16 NOTICE: ",
+            "Transferred:  \t    2.027 MiB / 2.861 MiB, 71%, 2.027 MiB/s, ETA 0s",
+            "Transferred:            1 / 2, 50%",
+            "Elapsed time:         1.0s",
+            "",
+            "2026/11/12 00:05:16 NOTICE: ",
+            "Transferred:  \t    2.861 MiB / 2.861 MiB, 100%, 2.027 MiB/s, ETA 0s",
+            "Transferred:            2 / 2, 100%",
+            "Elapsed time:         1.4s",
+            "",
+        ]
+        log, block = rclone.fold_stats_stream(lines)
+        self.assertEqual(len(block), 3)
+        stats = rclone.parse_stats(log + "\n" + "\n".join(block))
+        self.assertEqual(stats["files"], 2)
+        self.assertIsNotNone(stats["bytes"])
+        self.assertEqual(stats["errors"], 0)
+        self.assertEqual(stats["elapsed_seconds"], 1.4)
+
+    def test_fold_without_any_stats_block(self):
+        log, block = rclone.fold_stats_stream(["just a line", ""])
+        self.assertEqual(log, "just a line")
+        self.assertEqual(block, [])
+
+
+CONFIG_SAMPLE = """# 我手写的配置，别动
+[old]
+type = local
+
+[nas]
+type = sftp
+host = 1.2.3.4
+"""
+
+
+class RemoteConfigTest(unittest.TestCase):
+    """R15：Web UI 建 remote 的纯逻辑层（不碰文件系统、不需要真 rclone）。"""
+
+    def test_types_cover_smb_webdav_sftp(self):
+        kinds = [spec["type"] for spec in rclone.remote_type_specs()]
+        self.assertEqual(sorted(kinds), ["sftp", "smb", "webdav"])
+
+    def test_remote_name_rules(self):
+        self.assertEqual(rclone.validate_remote_name("  photos "), "photos")
+        self.assertEqual(rclone.validate_remote_name("my nas 2"), "my nas 2")
+        for bad in ("", "   ", ":nas", "nas:path", "-nas", "nas\n[evil]"):
+            with self.assertRaises(rclone.ConfigError, msg=bad):
+                rclone.validate_remote_name(bad)
+
+    def test_normalize_drops_unknown_fields(self):
+        # 未知字段一律丢弃：防止塞进 `config`/`config_pass` 这类会改变 rclone 行为的键
+        result = rclone.normalize_remote_params(
+            "smb",
+            {"host": " 10.0.0.5 ", "user": "u", "pass": "pw", "config": "/etc/passwd"},
+        )
+        self.assertEqual(result["host"], "10.0.0.5")
+        self.assertEqual(result["pass"], "pw")
+        self.assertNotIn("config", result)
+
+    def test_normalize_port_cleans_leading_zero(self):
+        result = rclone.normalize_remote_params("sftp", {"host": "h", "port": "0022"})
+        self.assertEqual(result["port"], "22")
+
+    def test_normalize_requires_host_and_url(self):
+        with self.assertRaises(rclone.ConfigError) as ctx:
+            rclone.normalize_remote_params("smb", {"user": "u"})
+        self.assertEqual(ctx.exception.code, "missing_host")
+        with self.assertRaises(rclone.ConfigError) as ctx:
+            rclone.normalize_remote_params("webdav", {"user": "u"})
+        self.assertEqual(ctx.exception.code, "missing_url")
+
+    def test_normalize_rejects_bad_values(self):
+        with self.assertRaises(rclone.ConfigError):
+            rclone.normalize_remote_params("webdav", {"url": "ftp://x"})
+        with self.assertRaises(rclone.ConfigError):
+            rclone.normalize_remote_params("sftp", {"host": "h", "port": "70000"})
+        with self.assertRaises(rclone.ConfigError):
+            rclone.normalize_remote_params("sftp", {"host": "h", "port": "abc"})
+        with self.assertRaises(rclone.ConfigError):
+            # 换行注入：能往 conf 里插一个假 section
+            rclone.normalize_remote_params("smb", {"host": "h\n[evil]\ntype = local"})
+        with self.assertRaises(rclone.ConfigError) as ctx:
+            rclone.normalize_remote_params("ftp", {"host": "h"})
+        self.assertEqual(ctx.exception.code, "invalid_remote_type")
+
+    def test_normalize_masked_password_means_keep(self):
+        result = rclone.normalize_remote_params(
+            "smb", {"host": "h", "pass": rclone.SECRET_MASK}
+        )
+        self.assertEqual(result["pass"], rclone.SECRET_MASK)
+
+    def test_parse_ignores_comments_and_keeps_sections(self):
+        sections = rclone.parse_config_sections(CONFIG_SAMPLE)
+        self.assertEqual(sorted(sections), ["nas", "old"])
+        self.assertEqual(sections["nas"]["host"], "1.2.3.4")
+        self.assertNotIn("我手写的配置", sections)
+
+    def test_upsert_appends_and_keeps_other_sections(self):
+        text = rclone.upsert_section(
+            CONFIG_SAMPLE,
+            "photos",
+            {"type": "smb", "host": "10.0.0.5", "pass": "cipher", "domain": ""},
+        )
+        self.assertIn("# 我手写的配置，别动", text)
+        self.assertIn("[old]", text)
+        self.assertIn("[nas]", text)
+        sections = rclone.parse_config_sections(text)
+        self.assertEqual(sections["photos"]["host"], "10.0.0.5")
+        # 空值不写行（等价于没这个键，且让「清空密码」表现为删行）
+        self.assertNotIn("domain", sections["photos"])
+        self.assertTrue(text.endswith("\n"))
+        self.assertFalse(text.endswith("\n\n"))
+
+    def test_upsert_replaces_in_place(self):
+        text = rclone.upsert_section(
+            CONFIG_SAMPLE, "nas", {"type": "sftp", "host": "9.9.9.9"}
+        )
+        self.assertNotIn("1.2.3.4", text)
+        self.assertEqual(rclone.parse_config_sections(text)["nas"]["host"], "9.9.9.9")
+        # 幂等：同样的值再写一次，文本不变
+        self.assertEqual(
+            rclone.upsert_section(text, "nas", {"type": "sftp", "host": "9.9.9.9"}), text
+        )
+
+    def test_remove_section(self):
+        text, removed = rclone.remove_section(CONFIG_SAMPLE, "nas")
+        self.assertTrue(removed)
+        self.assertEqual(sorted(rclone.parse_config_sections(text)), ["old"])
+        again, removed_again = rclone.remove_section(text, "nas")
+        self.assertFalse(removed_again)
+        self.assertEqual(again, text)
+
+    def test_upsert_into_empty_config(self):
+        text = rclone.upsert_section("", "nas", {"type": "local"})
+        self.assertEqual(text, "[nas]\ntype = local\n")
+
+    def test_mask_config_hides_secrets_only(self):
+        masked = rclone.mask_config(
+            {"type": "smb", "host": "h", "pass": "cipher", "bearer_token": ""}
+        )
+        self.assertEqual(masked["pass"], rclone.SECRET_MASK)
+        self.assertEqual(masked["bearer_token"], "")
+        self.assertEqual(masked["host"], "h")
+
+    def test_is_obscured(self):
+        self.assertTrue(rclone.is_obscured("-RgTsLV_fL9iaU_puWvW8sY0IMowPXLcI9U"))
+        self.assertFalse(rclone.is_obscured("mypassword"))
+        self.assertFalse(rclone.is_obscured(""))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

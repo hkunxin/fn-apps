@@ -203,6 +203,7 @@
               <div class="path-wrapper">
                 <select name="rclone_remote" id="rcloneRemote"></select>
                 <button type="button" id="btnReloadRemotes" class="ghost small" data-i18n="btn.refresh">刷新</button>
+                <button type="button" id="btnManageRemotes" class="ghost small" data-i18n="rclone.manage.open">管理</button>
               </div>
             </label>
             <label>
@@ -310,6 +311,54 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- spec-040 P2 / R15：在 Web UI 里建 remote（smb / webdav / sftp）。
+       密码只写不读：接口返回的一律是 ***set***，编辑时不回填明文。 -->
+  <div id="remoteModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 data-i18n="remote.title">远程存储</h2>
+        </div>
+        <div class="modal-header-actions">
+          <button class="icon-btn" data-close type="button" aria-label="关闭" data-i18n-attr="aria-label"
+            data-i18n="close">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p class="field-hint" data-i18n="remote.hint">remote 写在所选账号自己的 rclone 配置里，任务用哪个账号就以哪个账号为准。</p>
+        <div class="form-grid">
+          <label>
+            <span data-i18n="remote.account">账号</span>
+            <select id="remoteAccount"></select>
+            <small id="remotePath" class="field-hint"></small>
+          </label>
+        </div>
+        <div id="remoteList" class="remote-list"></div>
+        <form id="remoteForm">
+          <div class="form-grid">
+            <label>
+              <span data-i18n="remote.name">名称</span>
+              <input type="text" id="remoteName" autocomplete="off" placeholder="photos" />
+            </label>
+            <label>
+              <span data-i18n="remote.type">类型</span>
+              <select id="remoteType"></select>
+            </label>
+          </div>
+          <div id="remoteFields" class="form-grid"></div>
+          <div id="remoteError" class="field-hint field-hint-error hidden"></div>
+          <div class="modal-actions">
+            <div class="modal-actions-left">
+              <button type="button" id="remoteDelete" class="danger hidden" data-i18n="btn.delete">删除</button>
+            </div>
+            <button type="button" class="ghost" id="remoteCancel" data-i18n="btn.cancel">取消</button>
+            <button type="submit" class="primary" id="remoteSave" data-i18n="btn.save">保存</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 

@@ -8,6 +8,7 @@
 
 
 import argparse
+import collections
 import getpass
 import json
 import logging
@@ -2039,6 +2040,26 @@ class RcloneTargetLocks:
 class TaskRunner(threading.Thread):
     _running_lock = threading.RLock()
     _running_processes: Dict[int, Set[Popen[str]]] = {}
+    # R16：运行中进度。刻意放内存而不是 DB——
+    # 每秒一条 UPDATE 会和结果写入抢同一把库锁，而且进程一重启进度本来就失去意义。
+    _progress_lock = threading.RLock()
+    _progress: Dict[int, Dict[str, object]] = {}
+
+    @classmethod
+    def set_progress(cls, task_id, progress):
+        with cls._progress_lock:
+            cls._progress[int(task_id)] = dict(progress)
+
+    @classmethod
+    def get_progress(cls, task_id):
+        with cls._progress_lock:
+            data = cls._progress.get(int(task_id))
+            return dict(data) if data else None
+
+    @classmethod
+    def clear_progress(cls, task_id):
+        with cls._progress_lock:
+            cls._progress.pop(int(task_id), None)
 
     def __init__(
         self,
@@ -2214,6 +2235,32 @@ class TaskRunner(threading.Thread):
         )
 
         process = None
+        # 逐行收集：既要给 parse_stats 一个完整文本，也要边读边出进度（R16）。
+        # 用 deque 只留最近若干行做进度解析窗口——统计块最多十来行，
+        # 没必要每次都对整个输出重跑正则。
+        collected: List[str] = []
+        recent: collections.deque = collections.deque(maxlen=60)
+
+        def _pump():
+            try:
+                stream = process.stdout
+                if stream is None:
+                    return
+                for raw in stream:
+                    line = (raw or "").rstrip("\n")
+                    collected.append(line)
+                    if not rclone_mod.is_stats_line(line):
+                        continue
+                    recent.append(line)
+                    snapshot = rclone_mod.parse_progress("\n".join(recent))
+                    if snapshot:
+                        snapshot["updated_at"] = isoformat(time_now())
+                        TaskRunner.set_progress(task_id, snapshot)
+            except Exception:  # pylint: disable=broad-except
+                # 进程被超时终止时读流会抛，这是预期路径，不当错误处理
+                pass
+
+        reader = None
         try:
             process = Popen(
                 argv,
@@ -2224,7 +2271,11 @@ class TaskRunner(threading.Thread):
                 preexec_fn=preexec_fn,
             )
             self._register_process(task_id, process)
-            output, _ = process.communicate(timeout=execution_timeout)
+            reader = threading.Thread(target=_pump, daemon=True)
+            reader.start()
+            process.wait(timeout=execution_timeout)
+            # 等读流线程把尾巴收完，否则最后一块统计可能还没进 collected
+            reader.join(timeout=5)
         except TimeoutExpired:
             try:
                 TaskRunner.terminate_task_processes(task_id, grace_seconds=1.0)
@@ -2251,9 +2302,15 @@ class TaskRunner(threading.Thread):
         finally:
             if process is not None:
                 self._unregister_process(task_id, process)
+            TaskRunner.clear_progress(task_id)
 
-        text = output or ""
         exit_code = process.returncode
+        # 每秒一块的统计刷屏在这里折叠成「普通日志 + 最后一块」，
+        # 否则 4000 字的日志预览会被中间块挤光（R8 的现场要留给用户看）。
+        log_text, last_block = rclone_mod.fold_stats_stream(collected)
+        if last_block:
+            log_text = (log_text + "\n" + "\n".join(last_block)).strip()
+        text = log_text
         stats = rclone_mod.parse_stats(text)
         if stats:
             stats["exit_code"] = exit_code
@@ -3018,8 +3075,25 @@ def update_task(task_id, payload):
     json_response(task)
 
 
+def _stop_before_delete(task_id):
+    """删任务前先停掉它的进程。
+
+    不这么做会留下两个坑（都是实测踩到的）：
+    - 记录被删了，进程还在往目标目录写文件，用户以为「已经删掉了」；
+    - 它占着的 remote 锁要等自己跑完才释放，那段时间同名目标的任务全部
+      返回 `target_busy`（实测卡了 90 秒才恢复）。
+    锁由 TaskRunner 的 finally 释放，所以这里只需要让进程退出即可。
+    """
+    try:
+        TaskRunner.terminate_task_processes(task_id, grace_seconds=1.0)
+        TaskRunner.clear_progress(task_id)
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("failed to stop task %s before deleting it", task_id)
+
+
 def delete_task(task_id):
     ctx = get_context()
+    _stop_before_delete(task_id)
     deleted = ctx.db.delete_task(task_id)
     if not deleted:
         _send_error(HTTPStatus.NOT_FOUND)
@@ -3134,6 +3208,7 @@ def batch_tasks(payload):
             continue
 
         if action == "delete":
+            _stop_before_delete(task_id)
             if ctx.db.delete_task(task_id):
                 result.setdefault("deleted", []).append(task_id)
             else:
@@ -3548,6 +3623,205 @@ def probe_remote(payload):
     json_response(result)
 
 
+# ---------------------------------------------------------------- remote 配置管理（R15）
+
+
+def _account_home(account):
+    """账号的 `(uid, gid, home)`。
+
+    remote 配置必须写在**任务所用账号**的 HOME 下：rclone 按 `$HOME/.config/rclone`
+    找配置，服务以 root 跑而任务按账号跑，两者 HOME 不同。这一点在 P1 联调时踩过——
+    在 root 下配好 remote，任务执行时照样报 `didn't find section in config file`。
+    """
+    if not POSIX_ACCOUNT_SUPPORT:
+        raise ValueError("当前系统不支持多账号，无法管理 remote 配置")
+    name = str(account or "").strip()
+    if not name:
+        raise ValueError("请选择账号")
+    ensure_account_allowed(name)
+    try:
+        record = pwd.getpwnam(name)  # type: ignore[attr-defined]
+    except KeyError as exc:
+        raise ValueError(f"账号 {name} 不存在") from exc
+    return record.pw_uid, record.pw_gid, record.pw_dir
+
+
+def _remote_config_file(account):
+    uid, gid, home = _account_home(account)
+    return Path(home) / ".config" / "rclone" / "rclone.conf", uid, gid
+
+
+def _ensure_owned(path, uid, gid):
+    """把新建出来的目录/文件交给任务账号（非 root 时只能跳过）。"""
+    try:
+        os.chown(path, uid, gid)  # pyright: ignore[reportAttributeAccessIssue]
+    except (AttributeError, PermissionError, OSError):
+        pass
+
+
+def _read_remote_config(account):
+    path, _uid, _gid = _remote_config_file(account)
+    try:
+        return path.read_text(encoding="utf-8"), path
+    except FileNotFoundError:
+        return "", path
+    except OSError as exc:
+        raise ValueError(f"读取 rclone 配置失败：{exc}") from exc
+
+
+def _write_remote_config(account, text):
+    """写回 rclone.conf：临时文件 + 原子替换，权限 600、属主交给任务账号。
+
+    属主必须是对的：服务是 root，`mkdir` 出来的目录默认归 root，不 chown 的话
+    任务账号读不到自己的配置（P1 联调时就是这个坑的变体）。
+    """
+    path, uid, gid = _remote_config_file(account)
+    cfg_dir = path.parent
+    try:
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        _ensure_owned(cfg_dir, uid, gid)
+        os.chmod(cfg_dir, 0o700)
+        if cfg_dir.parent.name == ".config":
+            _ensure_owned(cfg_dir.parent, uid, gid)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.chmod(tmp, 0o600)
+        _ensure_owned(tmp, uid, gid)
+        os.replace(tmp, path)
+    except OSError as exc:
+        raise ValueError(f"写入 rclone 配置失败：{exc}") from exc
+    return path
+
+
+def _obscure_password(plain):
+    """明文密码 → rclone obscure 密文。
+
+    密码走 **stdin**（`rclone obscure -`），所以不会出现在进程列表或日志里。
+    rclone 只接受密文：直接写明文，认证时会 `couldn't decrypt password`。
+    """
+    binary = get_context().settings.rclone_bin or "rclone"
+    argv = rclone_mod.obscure_argv(binary)
+    try:
+        proc = run(argv, input=plain, text=True, capture_output=True, timeout=20)
+    except FileNotFoundError as exc:
+        raise ValueError(f"找不到 rclone（{binary}），无法加密密码") from exc
+    except TimeoutExpired as exc:
+        raise ValueError("rclone obscure 超时") from exc
+    if proc.returncode != 0:
+        detail = (proc.stderr or "").strip()[:200]
+        raise ValueError("rclone obscure 失败" + (f"：{detail}" if detail else ""))
+    result = (proc.stdout or "").strip()
+    if not rclone_mod.is_obscured(result):
+        raise ValueError("rclone obscure 返回了非预期结果")
+    return result
+
+
+def remote_schema():
+    """给前端用的后端定义与可选账号（不含任何用户数据）。"""
+    json_response(
+        {
+            "ok": True,
+            "types": rclone_mod.remote_type_specs(),
+            "accounts": list_allowed_accounts(),
+            "secret_mask": rclone_mod.SECRET_MASK,
+        }
+    )
+
+
+def list_remote_configs(payload):
+    account = str(payload.get("account") or "").strip()
+    try:
+        text, path = _read_remote_config(account)
+    except ValueError as exc:
+        json_response({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        return
+    remotes = []
+    for name, values in rclone_mod.parse_config_sections(text).items():
+        kind = values.get("type", "")
+        remotes.append(
+            {
+                "name": name,
+                "type": kind,
+                "values": rclone_mod.mask_config(values),
+                "supported": kind in rclone_mod.REMOTE_TYPES,
+            }
+        )
+    remotes.sort(key=lambda item: item["name"].lower())
+    json_response(
+        {"ok": True, "account": account, "path": str(path), "remotes": remotes}
+    )
+
+
+def save_remote(payload):
+    account = str(payload.get("account") or "").strip()
+    try:
+        name = rclone_mod.validate_remote_name(payload.get("name"))
+        params = rclone_mod.normalize_remote_params(
+            payload.get("type"), payload.get("params")
+        )
+        text, _path = _read_remote_config(account)
+    except (ValueError, rclone_mod.ConfigError) as exc:
+        json_response({"ok": False, "error": getattr(exc, "message", str(exc))}, HTTPStatus.BAD_REQUEST)
+        return
+
+    existing = rclone_mod.parse_config_sections(text).get(name, {})
+    spec = rclone_mod.REMOTE_TYPES.get(params["type"], {"fields": []})
+    secret_fields = [field["name"] for field in spec["fields"] if field.get("secret")]
+    try:
+        for field_name in secret_fields:
+            value = params.get(field_name)
+            if value == rclone_mod.SECRET_MASK:
+                # 回传打码值 = 「不修改」，沿用文件里的原值（可能已是密文）
+                params[field_name] = existing.get(field_name, "")
+            elif value:
+                params[field_name] = _obscure_password(value)
+    except ValueError as exc:
+        json_response({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        return
+
+    new_text = rclone_mod.upsert_section(text, name, params)
+    try:
+        path = _write_remote_config(account, new_text)
+    except ValueError as exc:
+        json_response({"ok": False, "error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+
+    logger.info("remote %s saved for account %s (%s)", name, account, path)
+    json_response(
+        {
+            "ok": True,
+            "name": name,
+            "type": params["type"],
+            "values": rclone_mod.mask_config(params),
+            "path": str(path),
+        }
+    )
+
+
+def delete_remote(payload):
+    account = str(payload.get("account") or "").strip()
+    try:
+        name = rclone_mod.validate_remote_name(payload.get("name"))
+        text, _path = _read_remote_config(account)
+    except (ValueError, rclone_mod.ConfigError) as exc:
+        json_response({"ok": False, "error": getattr(exc, "message", str(exc))}, HTTPStatus.BAD_REQUEST)
+        return
+
+    new_text, removed = rclone_mod.remove_section(text, name)
+    if not removed:
+        json_response(
+            {"ok": False, "error": f"remote {name} 不存在"}, HTTPStatus.NOT_FOUND
+        )
+        return
+    try:
+        _write_remote_config(account, new_text)
+    except ValueError as exc:
+        json_response({"ok": False, "error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    logger.info("remote %s deleted for account %s", name, account)
+    json_response({"ok": True, "removed": True, "name": name})
+
+
 def fs_list(payload):
     """列目录（spec-040 R2）。
 
@@ -3640,6 +3914,29 @@ def report_status():
             "retry_seconds": settings.report_retry_seconds,
             "max_attempts": settings.report_max_attempts,
             **stats,
+        }
+    )
+
+
+def task_progress(payload):
+    """R16：某条任务当前的执行进度。
+
+    进度只活在内存里（见 `TaskRunner._progress`）：任务结束或服务重启就没了，
+    那时 `running=false`、`progress=null`，前端据此停止轮询。
+    """
+    ctx = get_context()
+    try:
+        task_id = int(payload.get("id"))
+    except (TypeError, ValueError):
+        json_response({"ok": False, "error": "invalid task id"}, HTTPStatus.BAD_REQUEST)
+        return
+    running = bool(ctx.db.has_running_instance(task_id))
+    json_response(
+        {
+            "ok": True,
+            "id": task_id,
+            "running": running,
+            "progress": TaskRunner.get_progress(task_id),
         }
     )
 
@@ -3751,6 +4048,16 @@ def dispatch():
             report_status()
         elif action == "report-test":
             report_test()
+        elif action == "task-progress":
+            task_progress(payload)
+        elif action == "remote-schema":
+            remote_schema()
+        elif action == "list-remote-configs":
+            list_remote_configs(payload)
+        elif action == "save-remote":
+            save_remote(payload)
+        elif action == "delete-remote":
+            delete_remote(payload)
         else:
             json_response(
                 {"ok": False, "error": f"unsupported action: {action}"},

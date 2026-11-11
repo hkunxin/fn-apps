@@ -1,6 +1,6 @@
 [common]
 display_name="Task Scheduler"
-desc="A lightweight task scheduler: run scripts or commands on schedules and conditional triggers, configure rclone backup/sync tasks directly, and report results to Home Assistant."
+desc="A lightweight task scheduler: run scripts or commands on schedules and conditional triggers, configure rclone backup/sync tasks directly (create SMB/WebDAV/SFTP remotes in the UI, watch live transfer progress), and report results to Home Assistant."
 
 [entry]
 title="Task Scheduler"

@@ -57,6 +57,29 @@ rclone 任务的可配置项：模式（`copy` / `sync` / `check`）、源目录
 
 `job_key` 用 `rclone-<任务 id>-<名字 slug>`：**名字改了 job_key 不变**，否则 HA 里的历史会被拆成两条。
 
+## 在界面里管 remote（1.5.0）
+
+任务表单的「目标 remote」下拉旁有「管理」：可以选账号、新建/编辑/删除 SMB / WebDAV / SFTP 三种 remote。
+
+三个要点，都是踩过坑才写下来的：
+
+1. **remote 属于账号，不属于服务。** 配置写在 `<该账号 HOME>/.config/rclone/rclone.conf`，
+   因为任务是以任务里选定的账号执行的。用 `sudo rclone config` 配到 root 下，任务跑起来
+   照样报 `didn't find section in config file`。
+2. **密码只写不读。** 提交的是明文，服务端用 `rclone obscure -` 转成密文再落盘；之后任何
+   接口、列表、日志都只回 `***set***`。编辑时密码框永远是空的，留空表示「不修改」。
+3. **保存只改这一个 section。** 文件里其它 remote 与注释原样保留，不会被重排。
+
+## 运行中进度（1.5.0）
+
+rclone 任务跑起来后，任务表「上次结果」那一格会变成实时进度（`3% · 12 MB / 372 MB · big1.bin (6%)`），
+前端每 1.5 秒问一次 `task-progress`，没有运行中的任务就停止轮询。
+
+实现上有一个必须知道的取舍：`--stats` 是 **1s**（进度要密度），而 1 秒一块的统计会把日志刷爆。
+所以执行器**边读边折叠**，只保留最后一块统计 + 普通日志行——74 秒的任务日志从约 370 行压到 3 行。
+折叠时有个坑：rclone 最后一块统计后面还跟着空行，早期实现因此把整块丢掉，导致任务成功但
+`stats` 全变 `null`、日志为空。改的时候务必保留「块结束也要记住它」的逻辑。
+
 ## 退出码与统计的两个坑（踩过，别改回去）
 
 1. **不要加 `--stats-one-line`**：它会把 `Transferred: 3 / 3`、`Errors:`、`Elapsed time:` 全部吃掉，
@@ -67,6 +90,9 @@ rclone 任务的可配置项：模式（`copy` / `sync` / `check`）、源目录
 另外：源目录不存在时 rclone 退出码是 **3**（不是 1），失败会默认重试 3 次。
 
 ## 测试
+
+- `tests/smoke_040.py` / `tests/e2e_040.py` / `tests/contract_040.py`：见文件头说明
+- `task-progress`、`save-remote` 这类运行时行为没有单测，靠上面几个脚本在真机上跑
 
 ```bash
 python tests/test_rclone.py     # 43 项，纯逻辑，任意平台

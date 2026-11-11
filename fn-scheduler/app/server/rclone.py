@@ -60,9 +60,11 @@ EXIT_NOOP_SUCCESS = frozenset({9})
 # 2. `--stats-log-level NOTICE` 必须有：统计块默认走 INFO，不加它默认 verbosity 下
 #    压根不输出，解析就永远是 None。
 #
-# `--stats 30s` 是给长时间任务降噪用的：最后一次统计块无论如何都会打印，
-# 中间块打太密只会把 4000 字的日志预览挤掉。
-DEFAULT_STATS_ARGS = ("--stats", "30s", "--stats-log-level", "NOTICE")
+# `--stats 1s` 是给 R16（运行中进度）用的：只有够密才能看到「已传 / 总量」在动。
+# 代价是长任务每秒一块，日志会被统计块淹掉——所以执行器在**读流时把周期性统计块折叠成
+# 最后一块**（`fold_stats_stream`），最终日志反而比原来更短，parse_stats 也不受影响。
+# 想改回 30s 的话注意：进度会变成半分钟一跳，R16 基本等于没有。
+DEFAULT_STATS_ARGS = ("--stats", "1s", "--stats-log-level", "NOTICE")
 
 # 能力探测要求的 flag（R11：不比版本号，比能力）
 DEFAULT_REQUIRED_FLAGS = ("--stats-log-level", "--backup-dir", "--bwlimit", "--exclude", "--include")
@@ -71,9 +73,15 @@ _SIZE_UNITS = {
     "B": 1,
     "KIB": 1024, "MIB": 1024 ** 2, "GIB": 1024 ** 3, "TIB": 1024 ** 4, "PIB": 1024 ** 5,
     "KB": 1000, "MB": 1000 ** 2, "GB": 1000 ** 3, "TB": 1000 ** 4, "PB": 1000 ** 5,
+    # 短格式：进度块里的大小是 `190.735Mi`，**不带 B**（实测 2026-11-11）。
+    # 漏了这几种，parse_progress 的字节数会全变 None。
+    "KI": 1024, "MI": 1024 ** 2, "GI": 1024 ** 3, "TI": 1024 ** 4, "PI": 1024 ** 5,
+    "K": 1024, "M": 1024 ** 2, "G": 1024 ** 3, "T": 1024 ** 4, "P": 1024 ** 5,
 }
 
 _SIZE_TOKEN = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]i?B|B)\b", re.IGNORECASE)
+# 解析输出用（比 _SIZE_TOKEN 宽：允许 `Mi` / `M` 这种不带 B 的短格式）
+_SIZE_TOKEN_LOOSE = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]i?B?|B)\b", re.IGNORECASE)
 # 用户输入的大小：rclone 的 SizeSuffix 接受 `1M` / `1Mi` / `1MiB` / `1MB` / `512K` / `0`，
 # 不带 B 后缀也要放行（`--min-size 1M` 是官方文档里的写法）。
 _SIZE_INPUT = re.compile(r"^[0-9]+(?:\.[0-9]+)?\s?(?:[KMGTPE](?:i)?(?:B)?|B)?$", re.IGNORECASE)
@@ -554,6 +562,136 @@ def parse_stats(text: str) -> Dict[str, Optional[int]]:
     }
 
 
+# ---------------------------------------------------------------- 运行中进度（R16）
+
+# 统计块里的成员行。用于把周期性刷屏的块从日志里剔掉、只留最后一块。
+_STATS_MEMBER = re.compile(
+    r"^(?:Transferred|Checks|Deleted|Renamed|Errors|Elapsed time|Transferring|"
+    r"Server Side Copies|Copied \(new\)):"
+    r"|^\s*\*\s+\S.*?:\s+\d+%"
+)
+
+# 块头：`2026/11/11 23:44:50 NOTICE: `（冒号后是空的，正文在下一行）
+_STATS_HEAD = re.compile(r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} (?:NOTICE|INFO):\s*$")
+
+# `Transferred:   	   20.117 MiB / 238.419 MiB, 8%, 20.086 MiB/s, ETA 10s`
+_PROGRESS_BYTES = re.compile(
+    r"Transferred:\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]i?B?|B)\s*/\s*"
+    r"([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]i?B?|B)\s*,\s*(\d+)%",
+    re.IGNORECASE,
+)
+# `Transferred:            0 / 2, 0%`
+_PROGRESS_FILES = re.compile(r"Transferred:\s*(\d+)\s*/\s*(\d+)\s*,\s*(\d+)%")
+# ` *                                      big1.bin:  5% /190.735Mi, 10.026Mi/s, 18s`
+_PROGRESS_FILE = re.compile(
+    r"^\s*\*\s+(.+?):\s+(\d+)%\s*/([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?i?B?)\s*,"
+)
+
+
+def is_stats_line(line: str) -> bool:
+    """这行是不是 rclone 周期性统计块的一部分。"""
+    text = (line or "").rstrip("\r\n")
+    return bool(_STATS_MEMBER.match(text))
+
+
+def fold_stats_stream(lines: Iterable[str]) -> Tuple[str, List[str]]:
+    """把 rclone 每秒一块的统计刷屏折叠成「只留最后一块」。
+
+    返回 `(折叠后的日志, 最后一块的行列表)`。
+
+    为什么要折：`--stats 1s` 是进度需要的密度，但 1 小时任务会有 ~3600 块 × 7 行 ≈
+    2.5 万行，`log_tail` 只有 4000 字，整个执行历史会被统计块挤掉。折叠后日志里只留
+    非统计行（`NOTICE: xxx: Copied` 之类）+ 最终一块，既保住 R8 的结果又不淹掉现场。
+    """
+    kept: List[str] = []
+    block: List[str] = []
+    last_block: List[str] = []
+    in_block = False
+    for raw in lines:
+        line = (raw or "").rstrip("\r\n")
+        if _STATS_HEAD.match(line.strip()):
+            in_block = True
+            block = []
+            continue
+        if in_block and _STATS_MEMBER.match(line):
+            block.append(line)
+            continue
+        if in_block:
+            # 块结束：把刚结束的这块记成「最新」，再开始下一轮
+            if block:
+                last_block = block
+            in_block = False
+            block = []
+        if line.strip():
+            kept.append(line)
+    # 流在块中间结束时补一刀（例如进程被 kill，没有结尾空行）
+    if block:
+        last_block = block
+    return "\n".join(kept), last_block
+
+
+def parse_progress(text: str) -> Optional[Dict[str, Any]]:
+    """从**当前这一块**统计输出里抽进度。
+
+    只认最后一块；一块里都没有可识别的内容时返回 None（调用方据此保持上一次的进度，
+    而不是把界面刷成 0%）。
+
+    字段全部允许为 None：rclone 对不同模式（copy / check / sync）打的块不一样，
+    缺什么就留空，绝不用 0 顶替——`0%` 和「不知道」在界面上是两种东西。
+    """
+    payload = text or ""
+    if not payload.strip():
+        return None
+
+    # 只认最后一块。不截的话 `current_file` 会取到更早那一块里的文件名，
+    # 界面上就会出现「进度 100% 但还在传 big1.bin」这种自相矛盾的画面。
+    tail_start = 0
+    for matched_bytes in _PROGRESS_BYTES.finditer(payload):
+        tail_start = matched_bytes.start()
+    if tail_start:
+        payload = payload[tail_start:]
+
+    progress: Dict[str, Any] = {
+        "bytes_done": None,
+        "bytes_total": None,
+        "percent": None,
+        "files_done": None,
+        "files_total": None,
+        "current_file": None,
+        "current_percent": None,
+        "elapsed_seconds": _parse_elapsed(payload),
+    }
+
+    matched = _last_match(_PROGRESS_BYTES, payload)
+    if matched:
+        progress["bytes_done"] = _to_bytes(matched.group(1), matched.group(2))
+        progress["bytes_total"] = _to_bytes(matched.group(3), matched.group(4))
+        progress["percent"] = int(matched.group(5))
+
+    matched = _last_match(_PROGRESS_FILES, payload)
+    if matched:
+        progress["files_done"] = int(matched.group(1))
+        progress["files_total"] = int(matched.group(2))
+
+    # 多文件并发时 `Transferring:` 段会有多行，取第一行当「当前文件」
+    for raw in payload.splitlines():
+        matched = _PROGRESS_FILE.match(raw)
+        if matched:
+            name = matched.group(1).strip()
+            if name:
+                progress["current_file"] = name
+                progress["current_percent"] = int(matched.group(2))
+                break
+
+    # 一个字段都没认出来，就别返回一个全 None 的对象骗调用方
+    if all(
+        progress[key] is None
+        for key in ("bytes_done", "bytes_total", "percent", "files_done", "current_file")
+    ):
+        return None
+    return progress
+
+
 def summarize(stats: Dict[str, Optional[int]], status: str) -> str:
     """给上报用的中文摘要。缺失的字段直接不提，不用 0 占位。"""
     parts: List[str] = []
@@ -670,6 +808,288 @@ def classify_probe(exit_code: Optional[int], output: str) -> Dict[str, Any]:
         "code": "unknown",
         "message": text.strip().splitlines()[-1][:200] if text.strip() else "自检失败（无输出）",
     }
+
+
+# ---------------------------------------------------------------- remote 配置（R15）
+
+# 打码值：与 settings 里 ha_token 用的是同一个字面量，前端只需认这一个标记
+SECRET_MASK = "***set***"
+
+# 绝不回显的字段名。rclone 里 `pass` 存的是 obscure 之后的密文，但仍然不该回显，
+# 更不该把用户手输的明文留在任何接口返回里（R39）。
+SECRET_FIELDS = frozenset(
+    {
+        "pass",
+        "password",
+        "token",
+        "bearer_token",
+        "client_secret",
+        "key_file_pass",
+        "key_pem",
+    }
+)
+
+# 每种后端在 UI 上暴露的字段。字段名**必须**与 rclone 的 option 名逐字一致，
+# 否则写进去的配置 rclone 读不到（实测：webdav 缺 url 时只会报 `unsupported
+# protocol scheme ""`，很难从报错反推是字段名错了）。
+REMOTE_TYPES: Dict[str, Dict[str, Any]] = {
+    "smb": {
+        "label": "SMB / CIFS（Windows 共享、群晖、fnOS）",
+        "fields": [
+            {"name": "host", "label": "主机", "required": True, "placeholder": "192.168.1.10"},
+            {"name": "user", "label": "用户名", "required": False},
+            {"name": "pass", "label": "密码", "required": False, "secret": True},
+            {"name": "domain", "label": "域", "required": False, "placeholder": "WORKGROUP"},
+            {"name": "port", "label": "端口", "required": False, "kind": "int", "placeholder": "445"},
+        ],
+    },
+    "webdav": {
+        "label": "WebDAV（Nextcloud、群晖、坚果云等）",
+        "fields": [
+            {"name": "url", "label": "地址", "required": True, "kind": "url", "placeholder": "https://example.com/dav"},
+            {"name": "vendor", "label": "服务商", "required": False, "placeholder": "other"},
+            {"name": "user", "label": "用户名", "required": False},
+            {"name": "pass", "label": "密码", "required": False, "secret": True},
+            {"name": "bearer_token", "label": "Bearer Token", "required": False, "secret": True},
+        ],
+    },
+    "sftp": {
+        "label": "SFTP（SSH 文件传输）",
+        "fields": [
+            {"name": "host", "label": "主机", "required": True, "placeholder": "192.168.1.10"},
+            {"name": "user", "label": "用户名", "required": False},
+            {"name": "pass", "label": "密码", "required": False, "secret": True},
+            {"name": "port", "label": "端口", "required": False, "kind": "int", "placeholder": "22"},
+            {"name": "key_file", "label": "私钥路径", "required": False, "placeholder": "/root/.ssh/id_ed25519"},
+            {"name": "key_file_pass", "label": "私钥口令", "required": False, "secret": True},
+        ],
+    },
+}
+
+
+def remote_type_specs() -> List[Dict[str, Any]]:
+    """给前端用的后端与字段定义（不含任何用户数据）。"""
+    return [
+        {"type": name, "label": spec["label"], "fields": [dict(f) for f in spec["fields"]]}
+        for name, spec in REMOTE_TYPES.items()
+    ]
+
+
+def validate_remote_name(name: Any) -> str:
+    """remote 名（rclone.conf 的 section 名）。
+
+    允许字母数字与 `_.- `（rclone 自己允许空格），但必须以字母数字开头，
+    且不能含 `:`——`:` 是 `remote:path` 的分隔符，含了以后路径永远解析错。
+    """
+    text = _text(name)
+    if not text:
+        raise ConfigError("invalid_remote_name", "remote 名称不能为空")
+    if len(text) > 64:
+        raise ConfigError("invalid_remote_name", "remote 名称不能超过 64 个字符")
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.\- ]*$", text):
+        raise ConfigError(
+            "invalid_remote_name",
+            "remote 名称只能用字母、数字、空格和 _ . -，且必须以字母或数字开头",
+        )
+    return text
+
+
+def normalize_remote_params(remote_type: Any, params: Any) -> Dict[str, str]:
+    """校验并规范化一条 remote 的字段。
+
+    只保留该后端**声明过**的字段，其余一律丢弃——防止前端或调用方塞进
+    `config`/`config_pass` 这类会改变 rclone 行为的隐藏参数。
+
+    密码字段回传 `***set***` 表示「不修改」，由调用方保留配置文件里的原值；
+    回传空串表示「清空」。这样编辑表单时不必把明文再传一遍。
+    """
+    kind = _text(remote_type).lower()
+    spec = REMOTE_TYPES.get(kind)
+    if spec is None:
+        raise ConfigError(
+            "invalid_remote_type",
+            "只支持 smb / webdav / sftp 三种后端",
+        )
+    if params is not None and not isinstance(params, dict):
+        raise ConfigError("invalid_remote_params", "remote 字段必须是对象")
+
+    source = params or {}
+    result: Dict[str, str] = {"type": kind}
+    for field in spec["fields"]:
+        name = field["name"]
+        raw = source.get(name)
+        value = "" if raw is None else str(raw).strip()
+
+        if field.get("secret") and value == SECRET_MASK:
+            result[name] = SECRET_MASK
+            continue
+
+        if "\n" in value or "\r" in value:
+            raise ConfigError("invalid_remote_params", f"{field['label']}不能包含换行")
+
+        if field.get("kind") == "int" and value:
+            if not re.fullmatch(r"\d{1,5}", value):
+                raise ConfigError("invalid_remote_params", f"{field['label']}必须是数字")
+            if not 1 <= int(value) <= 65535:
+                raise ConfigError("invalid_remote_params", f"{field['label']}必须在 1..65535 之间")
+            value = str(int(value))
+
+        if field.get("kind") == "url" and value:
+            if not re.match(r"^https?://", value, re.IGNORECASE):
+                raise ConfigError(
+                    "invalid_remote_params",
+                    f"{field['label']}必须以 http:// 或 https:// 开头",
+                )
+
+        if field.get("required") and not value:
+            raise ConfigError(
+                "missing_" + name,
+                f"{field['label']}是必填项",
+            )
+
+        result[name] = value
+    return result
+
+
+def parse_config_sections(text: str) -> Dict[str, Dict[str, str]]:
+    """解析 rclone.conf 成 `{section: {key: value}}`。
+
+    没有用 configparser：它会把 `#` 注释、键顺序和大小写搞乱，而这个模块要做的
+    是**原样保留用户已有的其它配置**（下面 upsert/remove 是行级编辑）。
+    """
+    sections: Dict[str, Dict[str, str]] = {}
+    current: Optional[Dict[str, str]] = None
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith(";"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = sections.setdefault(line[1:-1].strip(), {})
+            continue
+        if current is None or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        current[key.strip()] = value.strip()
+    return sections
+
+
+def mask_config(values: Any) -> Dict[str, str]:
+    """把敏感字段换成 `***set***`（空值仍是空串）。"""
+    if not isinstance(values, dict):
+        return {}
+    masked: Dict[str, str] = {}
+    for key, value in values.items():
+        text = "" if value is None else str(value)
+        if str(key).lower() in SECRET_FIELDS:
+            masked[str(key)] = SECRET_MASK if text else ""
+        else:
+            masked[str(key)] = text
+    return masked
+
+
+def _section_bounds(lines: List[str], name: str) -> Optional[Tuple[int, int]]:
+    """返回 section 的 `[起, 止)` 行号区间；不存在返回 None。"""
+    header = "[%s]" % name
+    start: Optional[int] = None
+    for index, raw in enumerate(lines):
+        stripped = raw.strip()
+        if stripped == header:
+            start = index
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        stripped = lines[index].strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            end = index
+            break
+    return (start, end)
+
+
+def upsert_section(text: str, name: str, values: Dict[str, str]) -> str:
+    """在配置文件文本里新建或替换一个 section，**其它 section 与注释原样保留**。
+
+    行级编辑而不是 configparser 重写，是因为用户可能手工维护着别的 remote、
+    写着注释；一次保存把人家整个文件重排是很讨厌的行为。
+
+    空值不写进文件：rclone 里「缺这个键」与「键存在但为空」等价，少写一行更干净，
+    也让「清空密码」自然表现为删掉 `pass` 行。
+    """
+    lines = (text or "").splitlines()
+    body = [
+        "%s = %s" % (key, values[key])
+        for key in values
+        if str(values[key]).strip() != ""
+    ]
+
+    bounds = _section_bounds(lines, name)
+    if bounds is None:
+        kept = list(lines)
+        while kept and not kept[-1].strip():
+            kept.pop()
+        if kept:
+            kept.append("")
+        merged = kept + ["[%s]" % name] + body
+    else:
+        start, end = bounds
+        # 段内的注释行保留（挪到新内容前面），其余按新值重写
+        header_comments = [
+            raw
+            for raw in lines[start + 1 : end]
+            if raw.strip().startswith("#") or raw.strip().startswith(";")
+        ]
+        merged = (
+            list(lines[:start])
+            + ["[%s]" % name]
+            + header_comments
+            + body
+            + [""]
+            + list(lines[end:])
+        )
+
+    cleaned: List[str] = []
+    for raw in merged:
+        if not raw.strip() and cleaned and not cleaned[-1].strip():
+            continue
+        cleaned.append(raw)
+    while cleaned and not cleaned[-1].strip():
+        cleaned.pop()
+    return ("\n".join(cleaned) + "\n") if cleaned else ""
+
+
+def remove_section(text: str, name: str) -> Tuple[str, bool]:
+    """删除一个 section，返回 `(新文本, 是否真的删了)`。"""
+    lines = (text or "").splitlines()
+    bounds = _section_bounds(lines, name)
+    if bounds is None:
+        return text or "", False
+    start, end = bounds
+    kept = list(lines[:start]) + list(lines[end:])
+    cleaned: List[str] = []
+    for raw in kept:
+        if not raw.strip() and cleaned and not cleaned[-1].strip():
+            continue
+        cleaned.append(raw)
+    while cleaned and not cleaned[-1].strip():
+        cleaned.pop()
+    return ("\n".join(cleaned) + "\n") if cleaned else "", True
+
+
+def obscure_argv(binary: str) -> List[str]:
+    """`rclone obscure -` 的 argv：密码走 **stdin**，不出现在进程列表里。
+
+    rclone 只接受 obscure 之后的密码：直接写明文，rclone 在认证时会 reveal 失败
+    并报 `couldn't decrypt password`。所以保存前必须过这一步。
+    """
+    return [binary, "obscure", "-"]
+
+
+def is_obscured(value: Any) -> bool:
+    """粗判一个值是不是已经 obscure 过（rclone 用的是 base64 字母表、无填充、约 35 字符）。"""
+    text = _text(value)
+    return bool(text) and len(text) >= 20 and bool(re.fullmatch(r"[A-Za-z0-9_\-]+", text))
+
 
 
 def job_key(name: Any, task_id: Any, prefix: str = "rclone") -> str:

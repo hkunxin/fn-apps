@@ -298,6 +298,36 @@ const I18N = {
     "rclone.probe.ok": "目标可达",
     "rclone.probe.failed": "目标自检失败：{message}（仍会保存，可等远端恢复后再运行）",
     "rclone.advanced": "高级选项",
+    "rclone.manage.open": "管理",
+    "progress.starting": "正在启动…",
+    "remote.title": "远程存储",
+    "remote.hint": "remote 写在所选账号自己的 rclone 配置里。任务用哪个账号执行，就得配在那个账号下——用 sudo 配到 root 下次跑任务照样找不到。",
+    "remote.account": "账号",
+    "remote.path": "配置文件：{path}",
+    "remote.name": "名称",
+    "remote.type": "类型",
+    "remote.list.empty": "这个账号下还没有 remote",
+    "remote.list.unsupported": "该类型暂不支持在此编辑",
+    "remote.secret.keep": "已设置，留空表示不修改",
+    "remote.secret.empty": "未设置",
+    "remote.secret.hint": "出于安全考虑不回显；留空表示保留原密码",
+    "remote.type.smb": "SMB / CIFS",
+    "remote.type.webdav": "WebDAV",
+    "remote.type.sftp": "SFTP",
+    "remote.field.host": "主机",
+    "remote.field.user": "用户名",
+    "remote.field.pass": "密码",
+    "remote.field.domain": "域",
+    "remote.field.port": "端口",
+    "remote.field.url": "地址",
+    "remote.field.vendor": "服务商",
+    "remote.field.bearer_token": "Bearer Token",
+    "remote.field.key_file": "私钥路径",
+    "remote.field.key_file_pass": "私钥口令",
+    "remote.error.name_required": "请填写 remote 名称",
+    "remote.msg.saved": "已保存 remote：{name}",
+    "remote.msg.deleted": "已删除 remote：{name}",
+    "remote.confirm.delete": "删除 remote {name}？引用它的任务会跑失败。",
     "field.rclone.bwlimit": "带宽限制",
     "field.rclone.bwlimit_hint": "例如 10M、1.5M、off",
     "field.rclone.transfers": "并发传输数",
@@ -662,6 +692,36 @@ const I18N = {
     "rclone.probe.failed":
       "Target check failed: {message} (the task will still be saved; run it once the remote is reachable)",
     "rclone.advanced": "Advanced options",
+    "rclone.manage.open": "Manage",
+    "progress.starting": "Starting…",
+    "remote.title": "Remote storage",
+    "remote.hint": "Remotes live in the selected account's own rclone config. A task runs as the account it is configured with, so the remote must exist for that account — configuring it as root will not be found at run time.",
+    "remote.account": "Account",
+    "remote.path": "Config file: {path}",
+    "remote.name": "Name",
+    "remote.type": "Type",
+    "remote.list.empty": "No remotes for this account yet",
+    "remote.list.unsupported": "This type cannot be edited here",
+    "remote.secret.keep": "Already set — leave blank to keep",
+    "remote.secret.empty": "Not set",
+    "remote.secret.hint": "Hidden for security; leave blank to keep the current password",
+    "remote.type.smb": "SMB / CIFS",
+    "remote.type.webdav": "WebDAV",
+    "remote.type.sftp": "SFTP",
+    "remote.field.host": "Host",
+    "remote.field.user": "Username",
+    "remote.field.pass": "Password",
+    "remote.field.domain": "Domain",
+    "remote.field.port": "Port",
+    "remote.field.url": "URL",
+    "remote.field.vendor": "Vendor",
+    "remote.field.bearer_token": "Bearer token",
+    "remote.field.key_file": "Private key path",
+    "remote.field.key_file_pass": "Key passphrase",
+    "remote.error.name_required": "Enter a remote name",
+    "remote.msg.saved": "Remote saved: {name}",
+    "remote.msg.deleted": "Remote deleted: {name}",
+    "remote.confirm.delete": "Delete remote {name}? Tasks using it will start failing.",
     "field.rclone.bwlimit": "Bandwidth limit",
     "field.rclone.bwlimit_hint": "e.g. 10M, 1.5M, off",
     "field.rclone.transfers": "Transfers",
@@ -2382,6 +2442,372 @@ function getSelectedTasks() {
   return state.tasks.filter((task) => state.selectedIds.has(task.id));
 }
 
+// ---------------------------------------------------------------- R16 运行中进度
+//
+// 进度只存在服务端内存里（`task-progress`），所以这里按需轮询：
+// 列表里只要还有 running 的任务就每 1.5s 拉一次，全部结束就停。
+const PROGRESS_POLL_INTERVAL = 1500;
+const progressState = { timer: null };
+
+function formatProgressLine(progress) {
+  if (!progress) return t("progress.starting");
+  const parts = [];
+  const percent = toOptionalNumber(progress.percent);
+  if (percent !== null) parts.push(`${percent}%`);
+  const done = toOptionalNumber(progress.bytes_done);
+  const total = toOptionalNumber(progress.bytes_total);
+  const doneText = done === null ? "" : formatBytes(done);
+  const totalText = total === null ? "" : formatBytes(total);
+  if (doneText && totalText) parts.push(`${doneText} / ${totalText}`);
+  const file = String(progress.current_file || "").trim();
+  if (file) {
+    const filePercent = toOptionalNumber(progress.current_percent);
+    parts.push(filePercent === null ? file : `${file} (${filePercent}%)`);
+  }
+  // 一段都拼不出来时显示「正在启动」而不是空白——空白会被误读成任务没在跑
+  return parts.length ? parts.join(" · ") : t("progress.starting");
+}
+
+function runningTaskIds() {
+  return state.tasks
+    .filter((task) => task.latest_result?.status === "running")
+    .map((task) => task.id);
+}
+
+function stopProgressPolling() {
+  if (progressState.timer) {
+    clearInterval(progressState.timer);
+    progressState.timer = null;
+  }
+}
+
+async function refreshProgressCells() {
+  const ids = runningTaskIds();
+  if (!ids.length) {
+    stopProgressPolling();
+    return;
+  }
+  let finished = false;
+  for (const id of ids) {
+    try {
+      const payload = await api("task-progress", { id });
+      if (!payload?.running) {
+        finished = true;
+        continue;
+      }
+      const cell = elements.tableBody.querySelector(
+        `[data-progress-task="${id}"]`,
+      );
+      if (cell) cell.textContent = formatProgressLine(payload.progress);
+    } catch (_error) {
+      // 进度读不到不该影响列表本身：静默跳过，下一轮再试
+    }
+  }
+  if (finished) {
+    // 结束了就顺势刷一次列表，把「进度」换成真正的执行结果
+    stopProgressPolling();
+    loadTasks({ silent: true });
+  }
+}
+
+function startProgressPolling() {
+  if (progressState.timer) return;
+  progressState.timer = setInterval(
+    refreshProgressCells,
+    PROGRESS_POLL_INTERVAL,
+  );
+  refreshProgressCells();
+}
+
+// ---------------------------------------------------------------- R15 remote 管理
+//
+// 密码只写不读：接口返回的一律是 ***set***；编辑时密码框留空 = 不修改。
+const remoteState = {
+  schema: null,
+  account: "",
+  remotes: [],
+  editing: null,
+  type: "",
+  values: {},
+};
+
+function remoteEls() {
+  return {
+    modal: document.getElementById("remoteModal"),
+    account: document.getElementById("remoteAccount"),
+    path: document.getElementById("remotePath"),
+    list: document.getElementById("remoteList"),
+    form: document.getElementById("remoteForm"),
+    name: document.getElementById("remoteName"),
+    type: document.getElementById("remoteType"),
+    fields: document.getElementById("remoteFields"),
+    error: document.getElementById("remoteError"),
+    deleteBtn: document.getElementById("remoteDelete"),
+    cancelBtn: document.getElementById("remoteCancel"),
+  };
+}
+
+function currentRemoteSpec() {
+  const types = remoteState.schema?.types || [];
+  return types.find((spec) => spec.type === remoteState.type) || null;
+}
+
+function remoteTypeLabel(spec) {
+  const key = `remote.type.${spec.type}`;
+  const label = t(key);
+  return label === key ? spec.label || spec.type : label;
+}
+
+function remoteFieldLabel(field) {
+  const key = `remote.field.${field.name}`;
+  const label = t(key);
+  return label === key ? field.label || field.name : label;
+}
+
+function showRemoteError(message) {
+  const els = remoteEls();
+  if (!els.error) return;
+  els.error.textContent = message || "";
+  els.error.classList.toggle("hidden", !message);
+}
+
+async function openRemoteManager() {
+  const els = remoteEls();
+  if (!els.modal) return;
+  openModal(els.modal);
+  showRemoteError("");
+  try {
+    if (!remoteState.schema) {
+      remoteState.schema = await api("remote-schema");
+    }
+  } catch (error) {
+    showRemoteError(error.message);
+    return;
+  }
+  initRemoteAccount();
+  await loadRemoteConfigs();
+  resetRemoteForm();
+}
+
+function initRemoteAccount() {
+  const els = remoteEls();
+  const accounts = remoteState.schema?.accounts || [];
+  if (!accounts.length) {
+    els.account.innerHTML = "";
+    return;
+  }
+  const formAccount = elements.taskForm?.querySelector('[name="account"]')?.value;
+  const preferred = formAccount || state.tasks[0]?.account || accounts[0];
+  if (!remoteState.account || !accounts.includes(remoteState.account)) {
+    remoteState.account = accounts.includes(preferred) ? preferred : accounts[0];
+  }
+  els.account.innerHTML = accounts
+    .map(
+      (name) =>
+        `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`,
+    )
+    .join("");
+  els.account.value = remoteState.account;
+}
+
+async function loadRemoteConfigs() {
+  const els = remoteEls();
+  if (!remoteState.account) {
+    renderRemoteList();
+    return;
+  }
+  try {
+    const payload = await api("list-remote-configs", {
+      account: remoteState.account,
+    });
+    remoteState.remotes = Array.isArray(payload?.remotes)
+      ? payload.remotes
+      : [];
+    els.path.textContent = payload?.path
+      ? t("remote.path", { path: payload.path })
+      : "";
+  } catch (error) {
+    remoteState.remotes = [];
+    showRemoteError(error.message);
+  }
+  renderRemoteList();
+}
+
+function renderRemoteList() {
+  const els = remoteEls();
+  if (!els.list) return;
+  if (!remoteState.remotes.length) {
+    els.list.innerHTML = `<p class="field-hint">${escapeHtml(t("remote.list.empty"))}</p>`;
+    return;
+  }
+  els.list.innerHTML = "";
+  remoteState.remotes.forEach((item) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "remote-item";
+    if (item.name === remoteState.editing) {
+      row.classList.add("remote-item-active");
+    }
+    const warn = item.supported
+      ? ""
+      : `<span class="remote-item-warn">${escapeHtml(t("remote.list.unsupported"))}</span>`;
+    row.innerHTML = `<span class="remote-item-name">${escapeHtml(item.name)}</span>
+      <span class="kind-pill kind-rclone">${escapeHtml(item.type || "?")}</span>${warn}`;
+    row.addEventListener("click", () => resetRemoteForm(item));
+    els.list.appendChild(row);
+  });
+}
+
+function renderRemoteTypeOptions() {
+  const els = remoteEls();
+  const types = remoteState.schema?.types || [];
+  els.type.innerHTML = types
+    .map(
+      (spec) =>
+        `<option value="${escapeHtml(spec.type)}">${escapeHtml(remoteTypeLabel(spec))}</option>`,
+    )
+    .join("");
+  if (remoteState.type) els.type.value = remoteState.type;
+}
+
+function renderRemoteFields() {
+  const els = remoteEls();
+  const spec = currentRemoteSpec();
+  els.fields.innerHTML = "";
+  if (!spec) return;
+  spec.fields.forEach((field) => {
+    const label = document.createElement("label");
+    const title = document.createElement("span");
+    title.textContent = remoteFieldLabel(field);
+    label.appendChild(title);
+
+    const input = document.createElement("input");
+    input.dataset.remoteField = field.name;
+    input.autocomplete = "off";
+    const existing = String(remoteState.values?.[field.name] || "");
+    if (field.secret) {
+      // 密码框永远是空的：只在占位符里提示「已设置」，绝不回填（R39）
+      input.type = "password";
+      input.placeholder = existing
+        ? t("remote.secret.keep")
+        : t("remote.secret.empty");
+    } else {
+      input.type = "text";
+      input.value = existing;
+      input.placeholder = field.placeholder || "";
+    }
+    if (field.required) input.required = true;
+    label.appendChild(input);
+    if (field.secret && existing) {
+      const hint = document.createElement("small");
+      hint.className = "field-hint";
+      hint.textContent = t("remote.secret.hint");
+      label.appendChild(hint);
+    }
+    els.fields.appendChild(label);
+  });
+}
+
+function resetRemoteForm(item = null) {
+  const els = remoteEls();
+  remoteState.editing = item ? item.name : null;
+  const types = remoteState.schema?.types || [];
+  const itemType = item?.type || "";
+  remoteState.type =
+    itemType && types.some((spec) => spec.type === itemType)
+      ? itemType
+      : types[0]?.type || "";
+  remoteState.values = item?.values || {};
+  els.name.value = item ? item.name : "";
+  // 名称是 rclone 的 section 名：改名等于新建一条，所以已有 remote 不允许改名
+  els.name.readOnly = Boolean(item);
+  renderRemoteTypeOptions();
+  renderRemoteFields();
+  els.deleteBtn.classList.toggle("hidden", !item);
+  showRemoteError("");
+  renderRemoteList();
+}
+
+async function handleRemoteSubmit(event) {
+  event.preventDefault();
+  const els = remoteEls();
+  const params = {};
+  const spec = currentRemoteSpec();
+  els.fields.querySelectorAll("[data-remote-field]").forEach((input) => {
+    const name = input.dataset.remoteField;
+    const field = (spec?.fields || []).find((item) => item.name === name);
+    const typed = String(input.value || "").trim();
+    if (field?.secret) {
+      if (typed) {
+        params[name] = typed;
+      } else if (remoteState.values?.[name]) {
+        // 留空 = 不修改：回传打码标记，服务端会沿用文件里的原值
+        params[name] = remoteState.schema?.secret_mask || "***set***";
+      } else {
+        params[name] = "";
+      }
+    } else {
+      params[name] = typed;
+    }
+  });
+  const name = String(els.name.value || "").trim();
+  if (!name) {
+    showRemoteError(t("remote.error.name_required"));
+    return;
+  }
+  try {
+    await api("save-remote", {
+      account: remoteState.account,
+      name,
+      type: els.type.value,
+      params,
+    });
+    showToast(t("remote.msg.saved", { name }));
+    await loadRemoteConfigs();
+    // 下拉里的 remote 列表要跟着变，否则新建完还得手动点刷新
+    await loadRemotes({ force: true });
+    resetRemoteForm();
+  } catch (error) {
+    showRemoteError(error.message);
+  }
+}
+
+async function deleteCurrentRemote() {
+  const name = remoteState.editing;
+  if (!name) return;
+  if (!(await showConfirm(t("remote.confirm.delete", { name })))) return;
+  try {
+    await api("delete-remote", { account: remoteState.account, name });
+    showToast(t("remote.msg.deleted", { name }));
+    await loadRemoteConfigs();
+    await loadRemotes({ force: true });
+    resetRemoteForm();
+  } catch (error) {
+    showRemoteError(error.message);
+  }
+}
+
+function bindRemoteManagerEventListeners() {
+  const els = remoteEls();
+  document
+    .getElementById("btnManageRemotes")
+    ?.addEventListener("click", openRemoteManager);
+  els.account?.addEventListener("change", async () => {
+    remoteState.account = els.account.value;
+    await loadRemoteConfigs();
+    resetRemoteForm();
+  });
+  els.type?.addEventListener("change", () => {
+    remoteState.type = els.type.value;
+    // 换类型后旧字段值不再适用（smb 的 host 和 webdav 的 url 不是一回事）
+    remoteState.values = {};
+    renderRemoteFields();
+  });
+  els.form?.addEventListener("submit", handleRemoteSubmit);
+  els.deleteBtn?.addEventListener("click", deleteCurrentRemote);
+  els.cancelBtn?.addEventListener("click", () => resetRemoteForm());
+}
+
 function renderTasks() {
   elements.tableBody.innerHTML = "";
   const { tasks } = state;
@@ -2419,6 +2845,14 @@ function renderTasks() {
       }
     }
 
+    // rclone 任务在跑时，「上次结果」这一格改成进度占位，交给轮询填内容（R16）。
+    // 脚本任务没有统计输出，保持原样显示。
+    const isRunning = latestResult?.status === "running";
+    const summaryCell =
+      isRunning && isRclone
+        ? `<span class="result-summary progress-text" data-progress-task="${task.id}">${escapeHtml(t("progress.starting"))}</span>`
+        : `<span class="result-summary">${escapeHtml(summaryText)}</span>`;
+
     tr.innerHTML = `
             <td><span class="badge ${task.is_active ? "badge-active" : "badge-paused"}">${task.is_active ? t("status.enabled") : t("status.disabled")}</span></td>
             <td>
@@ -2426,7 +2860,7 @@ function renderTasks() {
             </td>
             <td><span class="kind-pill ${isRclone ? "kind-rclone" : "kind-script"}">${escapeHtml(kindLabel)}</span></td>
             <td><span class="target-text" title="${escapeHtml(targetText)}">${escapeHtml(targetText)}</span></td>
-            <td><span class="result-summary">${escapeHtml(summaryText)}</span></td>
+            <td>${summaryCell}</td>
             <td>${escapeHtml(formatDate(task.next_run_at))}</td>
                 <td><span class="trigger-label">${escapeHtml(triggerLabel)}</span></td>
             <td><span class="status-pill ${status.className}">${escapeHtml(statusLabel)}</span></td>
@@ -2435,6 +2869,12 @@ function renderTasks() {
     elements.tableBody.appendChild(tr);
   });
   updateToolbarState();
+  // 有任务在跑就开轮询，全部结束就停——不为了一个进度让页面永远每 1.5s 打扰服务端
+  if (runningTaskIds().length) {
+    startProgressPolling();
+  } else {
+    stopProgressPolling();
+  }
 }
 
 function updateToolbarState() {
@@ -3757,6 +4197,7 @@ function bindRcloneEventListeners() {
 function bindFormAndModalEventListeners() {
   elements.taskForm.addEventListener("submit", handleFormSubmit);
   elements.settingsForm?.addEventListener("submit", saveSettings);
+  bindRemoteManagerEventListeners();
   document
     .querySelectorAll("[data-close]")
     .forEach((btn) => btn.addEventListener("click", closeModalOnOverlay));

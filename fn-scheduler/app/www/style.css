@@ -1794,3 +1794,58 @@ label.checkbox-option-block {
     }
   }
 }
+
+/* ---------------------------------------------------------------- spec-040 P2 */
+
+/* R16：运行中的进度文字。等宽数字，避免百分比跳动时整行左右抖 */
+.result-summary.progress-text {
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+
+/* R15：remote 管理列表 */
+.remote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 14px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.remote-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.remote-item:hover {
+  border-color: var(--primary);
+}
+
+.remote-item-active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+
+.remote-item-name {
+  flex: 1;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-item-warn {
+  font-size: 12px;
+  color: var(--danger);
+}
