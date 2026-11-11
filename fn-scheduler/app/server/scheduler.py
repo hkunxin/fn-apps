@@ -1555,8 +1555,9 @@ class Database:
     def mark_report_sent(self, queue_id, run_id):
         now = isoformat(time_now())
         with self._lock:
+            # 同时清掉 last_error：补发成功后还留着「连不上 HA」，设置页会一直显示过期错误
             self._conn.execute(
-                "UPDATE report_queue SET state='sent', updated_at=? WHERE id=?",
+                "UPDATE report_queue SET state='sent', last_error=NULL, updated_at=? WHERE id=?",
                 (now, queue_id),
             )
             if run_id:
