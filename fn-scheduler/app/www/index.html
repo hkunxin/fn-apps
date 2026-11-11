@@ -27,6 +27,7 @@
         <button id="btnEdit" data-i18n="btn.edit">编辑</button>
         <button id="btnDelete" class="danger" data-i18n="btn.delete">删除</button>
         <button id="btnRun" data-i18n="btn.run">立即运行</button>
+        <button id="btnDryRun" data-i18n="btn.dry_run">试运行</button>
         <button id="btnStop" class="danger" data-i18n="btn.stop">终止</button>
         <button id="btnToggle" data-i18n="btn.toggle">启用/停用</button>
         <button id="btnResults" data-i18n="btn.results">查看结果</button>
@@ -43,6 +44,18 @@
               </th>
               <th class="sortable-header" data-sort-key="name" tabindex="0" aria-sort="none">
                 <span class="sort-label" data-i18n="table.name">任务名称</span>
+                <span class="sort-indicator" aria-hidden="true"></span>
+              </th>
+              <th class="sortable-header" data-sort-key="kind" tabindex="0" aria-sort="none">
+                <span class="sort-label" data-i18n="table.kind">类型</span>
+                <span class="sort-indicator" aria-hidden="true"></span>
+              </th>
+              <th class="sortable-header" data-sort-key="target" tabindex="0" aria-sort="none">
+                <span class="sort-label" data-i18n="table.target">目标</span>
+                <span class="sort-indicator" aria-hidden="true"></span>
+              </th>
+              <th class="sortable-header" data-sort-key="result" tabindex="0" aria-sort="none">
+                <span class="sort-label" data-i18n="table.result_summary">上次结果</span>
                 <span class="sort-indicator" aria-hidden="true"></span>
               </th>
               <th class="sortable-header" data-sort-key="next_run" tabindex="0" aria-sort="none">
@@ -79,6 +92,17 @@
       </div>
       <form id="taskForm">
         <input type="hidden" name="task_id" />
+        <div class="kind-switch" role="radiogroup" aria-labelledby="taskKindLabel">
+          <span id="taskKindLabel" class="kind-switch-label" data-i18n="field.task_kind">任务类型</span>
+          <label class="kind-option">
+            <input type="radio" name="task_kind" value="script" checked />
+            <span data-i18n="kind.script">脚本任务</span>
+          </label>
+          <label class="kind-option">
+            <input type="radio" name="task_kind" value="rclone" />
+            <span data-i18n="kind.rclone">rclone 备份/同步</span>
+          </label>
+        </div>
         <div class="form-grid">
           <label>
             <span data-i18n="field.name">任务名称</span>
@@ -138,29 +162,129 @@
           </div>
         </div>
 
-        <label>
-          <span data-i18n="field.pre_tasks">前置任务</span>
-          <div class="pretask-wrapper">
-            <div id="preTaskChecklist" class="pretask-checklist" aria-label="前置任务选择"></div>
-            <select name="pre_task_ids" id="preTaskSelect" multiple size="4" class="hidden-pretask-select"></select>
-            <button type="button" id="btnClearPreTasks" class="ghost small" data-i18n="btn.clear_pre_tasks">全取消</button>
+        <div data-kind-section="script">
+          <label>
+            <span data-i18n="field.pre_tasks">前置任务</span>
+            <div class="pretask-wrapper">
+              <div id="preTaskChecklist" class="pretask-checklist" aria-label="前置任务选择"></div>
+              <select name="pre_task_ids" id="preTaskSelect" multiple size="4" class="hidden-pretask-select"></select>
+              <button type="button" id="btnClearPreTasks" class="ghost small" data-i18n="btn.clear_pre_tasks">全取消</button>
+            </div>
+            <small data-i18n="field.pre_tasks_hint">仅当所选任务最近一次成功后才执行</small>
+          </label>
+
+          <!-- 模板选择 -->
+          <label>
+            <span data-i18n="field.template">任务模板</span>
+            <select name="template" id="templateSelect">
+              <option value="">无模板（自定义）</option>
+            </select>
+            <small class="muted" data-i18n="field.template_hint">选择模板会自动填充任务内容</small>
+          </label>
+
+          <label>
+            <span data-i18n="field.script">任务内容</span>
+            <textarea name="script_body" rows="6" placeholder="#!/bin/bash&#10;echo hello" required></textarea>
+          </label>
+        </div>
+
+        <div class="rclone-section hidden" data-kind-section="rclone">
+          <div id="rcloneEnvNotice" class="rclone-notice hidden"></div>
+          <label>
+            <span data-i18n="field.rclone.source">源目录</span>
+            <div class="path-wrapper">
+              <input type="text" name="rclone_source" id="rcloneSource" placeholder="/vol1/1000/Photos" />
+              <button type="button" id="btnBrowseSource" class="ghost small" data-i18n="rclone.source.browse">浏览</button>
+            </div>
+          </label>
+          <div class="form-grid">
+            <label>
+              <span data-i18n="field.rclone.dest_remote">目标 remote</span>
+              <div class="path-wrapper">
+                <select name="rclone_remote" id="rcloneRemote"></select>
+                <button type="button" id="btnReloadRemotes" class="ghost small" data-i18n="btn.refresh">刷新</button>
+              </div>
+            </label>
+            <label>
+              <span data-i18n="field.rclone.dest_path">目标路径</span>
+              <input type="text" name="rclone_dest_path" id="rcloneDestPath" placeholder="Photos/2026" />
+              <small data-i18n="rclone.dest.path_hint">留空表示 remote 根目录</small>
+            </label>
           </div>
-          <small data-i18n="field.pre_tasks_hint">仅当所选任务最近一次成功后才执行</small>
-        </label>
+          <div id="rcloneProbe" class="field-hint hidden"></div>
+          <label>
+            <span data-i18n="field.rclone.mode">执行模式</span>
+            <select name="rclone_mode" id="rcloneMode">
+              <option value="copy" data-i18n="rclone.mode.copy">只增不删（copy）</option>
+              <option value="sync" data-i18n="rclone.mode.sync">镜像（sync，会删除目标多余文件）</option>
+              <option value="check" data-i18n="rclone.mode.check">仅校验（check）</option>
+            </select>
+            <small id="rcloneModeHint" class="mode-hint"></small>
+          </label>
+          <div id="syncConfirmBox" class="sync-confirm hidden">
+            <label class="checkbox-option">
+              <input type="checkbox" id="syncConfirm" />
+              <span data-i18n="rclone.sync.confirm">我知道会删除目标端多余文件</span>
+            </label>
+            <small id="syncConfirmHint" class="field-hint field-hint-error hidden"
+              data-i18n="rclone.sync.blocked">勾选确认后才能保存 sync 任务</small>
+          </div>
 
-        <!-- 模板选择 -->
-        <label>
-          <span data-i18n="field.template">任务模板</span>
-          <select name="template" id="templateSelect">
-            <option value="">无模板（自定义）</option>
-          </select>
-          <small class="muted" data-i18n="field.template_hint">选择模板会自动填充任务内容</small>
-        </label>
-
-        <label>
-          <span data-i18n="field.script">任务内容</span>
-          <textarea name="script_body" rows="6" placeholder="#!/bin/bash&#10;echo hello" required></textarea>
-        </label>
+          <details class="rclone-advanced" id="rcloneAdvanced">
+            <summary data-i18n="rclone.advanced">高级选项</summary>
+            <div class="form-grid">
+              <label>
+                <span data-i18n="field.rclone.bwlimit">带宽限制</span>
+                <input type="text" name="rclone_bwlimit" id="rcloneBwlimit" placeholder="10M" />
+                <small data-i18n="field.rclone.bwlimit_hint">例如 10M、1.5M、off</small>
+              </label>
+              <label>
+                <span data-i18n="field.rclone.transfers">并发传输数</span>
+                <input type="number" name="rclone_transfers" id="rcloneTransfers" min="1" max="64" step="1" />
+              </label>
+              <label>
+                <span data-i18n="field.rclone.checkers">校验并发数</span>
+                <input type="number" name="rclone_checkers" id="rcloneCheckers" min="1" max="64" step="1" />
+              </label>
+              <label>
+                <span data-i18n="field.rclone.max_age">文件年龄上限</span>
+                <input type="text" name="rclone_max_age" id="rcloneMaxAge" placeholder="30d" />
+                <small data-i18n="field.rclone.max_age_hint">例如 30d、12h</small>
+              </label>
+              <label>
+                <span data-i18n="field.rclone.min_size">最小文件大小</span>
+                <input type="text" name="rclone_min_size" id="rcloneMinSize" placeholder="1M" />
+                <small data-i18n="field.rclone.min_size_hint">例如 1M、512K</small>
+              </label>
+              <label>
+                <span data-i18n="field.rclone.links">软链接策略</span>
+                <select name="rclone_links" id="rcloneLinks">
+                  <option value="" data-i18n="rclone.links.default">默认（不传参数）</option>
+                  <option value="skip" data-i18n="rclone.links.skip">跳过（skip）</option>
+                  <option value="translate" data-i18n="rclone.links.translate">转为普通文件（translate）</option>
+                  <option value="include" data-i18n="rclone.links.include">跟随链接（include）</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span data-i18n="field.rclone.exclude">排除规则（每行一条）</span>
+              <textarea name="rclone_exclude" id="rcloneExclude" rows="3" placeholder=".DS_Store&#10;*.tmp"></textarea>
+            </label>
+            <label>
+              <span data-i18n="field.rclone.include">包含规则（每行一条）</span>
+              <textarea name="rclone_include" id="rcloneInclude" rows="3" placeholder="*.jpg"></textarea>
+            </label>
+            <label>
+              <span data-i18n="field.rclone.backup_dir">删除前保留副本目录</span>
+              <input type="text" name="rclone_backup_dir" id="rcloneBackupDir" placeholder="onedrive:Photos-old" />
+              <small data-i18n="field.rclone.backup_dir_hint">remote:路径，例如 onedrive:Photos-old</small>
+            </label>
+            <label class="checkbox-option checkbox-option-block">
+              <input type="checkbox" id="rcloneDryRun" name="rclone_dry_run" />
+              <span data-i18n="field.rclone.dry_run">默认试运行（--dry-run）</span>
+            </label>
+          </details>
+        </div>
 
         <div class="modal-actions">
           <div class="modal-actions-left">
@@ -252,6 +376,73 @@
                 <input type="number" name="condition_timeout" min="1" step="1" required />
                 <small data-i18n="field.settings.condition_timeout_hint">条件脚本执行超过该时间会被终止，最小 1 秒。</small>
               </label>
+            </div>
+          </section>
+          <section class="settings-group" aria-labelledby="settingsReportTitle">
+            <div class="settings-group-header">
+              <h3 id="settingsReportTitle" data-i18n="settings.group.report.title">HA 上报</h3>
+              <p data-i18n="settings.group.report.subtitle">把任务执行结果推送到 Home Assistant；HA 不可达时事件会进本地队列并自动补发。</p>
+            </div>
+            <div class="form-grid">
+              <label>
+                <span data-i18n="field.settings.ha_base_url">HA 地址</span>
+                <input type="text" name="ha_base_url" placeholder="http://192.168.31.5:8123" />
+                <small data-i18n="field.settings.ha_base_url_hint">例如 http://192.168.31.5:8123</small>
+              </label>
+              <label>
+                <span data-i18n="field.settings.ha_token">长期访问令牌</span>
+                <input type="password" name="ha_token" autocomplete="new-password" spellcheck="false" />
+                <small data-i18n="field.settings.ha_token_hint">只写不读：界面永不回显已保存的令牌</small>
+              </label>
+              <label>
+                <span data-i18n="field.settings.report_mode">上报模式</span>
+                <select name="report_mode">
+                  <option value="all" data-i18n="report.mode.all">全部</option>
+                  <option value="fail" data-i18n="report.mode.fail">仅失败</option>
+                  <option value="off" data-i18n="report.mode.off">关闭</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="field.settings.rclone_bin">rclone 路径</span>
+                <input type="text" name="rclone_bin" placeholder="rclone" />
+                <small data-i18n="field.settings.rclone_bin_hint">留空按 rclone 处理；fnOS 实测路径为 /usr/trim/bin/rclone</small>
+              </label>
+            </div>
+            <label>
+              <span data-i18n="field.settings.backup_allowlist">允许备份的本地根目录</span>
+              <textarea name="backup_root_allowlist" rows="2" placeholder="/vol1&#10;/vol2/backup"></textarea>
+              <small data-i18n="field.settings.backup_allowlist_hint">每行一个绝对路径；留空表示不限制。</small>
+            </label>
+            <div class="report-status" id="reportStatusBox">
+              <div class="report-status-grid">
+                <div class="report-status-item">
+                  <span class="muted" data-i18n="settings.report.status.configured">配置状态</span>
+                  <strong id="reportStatusConfigured">—</strong>
+                </div>
+                <div class="report-status-item">
+                  <span class="muted" data-i18n="settings.report.status.pending">待补发</span>
+                  <strong id="reportStatusPending">—</strong>
+                </div>
+                <div class="report-status-item">
+                  <span class="muted" data-i18n="settings.report.status.sent">已发送</span>
+                  <strong id="reportStatusSent">—</strong>
+                </div>
+                <div class="report-status-item">
+                  <span class="muted" data-i18n="settings.report.status.failed">失败</span>
+                  <strong id="reportStatusFailed">—</strong>
+                </div>
+                <div class="report-status-item">
+                  <span class="muted" data-i18n="settings.report.status.last_attempt">最近尝试</span>
+                  <strong id="reportStatusLastAttempt">—</strong>
+                </div>
+              </div>
+              <div class="report-status-error">
+                <span class="muted" data-i18n="settings.report.status.last_error">最近错误</span>
+                <span id="reportStatusLastError" class="report-error-text">—</span>
+              </div>
+              <div class="report-status-actions">
+                <button type="button" id="btnReportTest" class="ghost" data-i18n="btn.report_test">发一条测试</button>
+              </div>
             </div>
           </section>
         </div>
@@ -456,6 +647,34 @@
           <button type="button" id="btnApplyCron" class="primary" data-i18n="btn.apply_cron">填入 Cron</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="dirPickerModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 data-i18n="dir.title">选择目录</h2>
+          <p class="subtitle" data-i18n="dir.subtitle">只列出子目录，用于选择本地源目录</p>
+        </div>
+        <button class="icon-btn" data-close type="button" aria-label="关闭" data-i18n-attr="aria-label"
+          data-i18n="close">&times;</button>
+      </div>
+      <div class="dir-picker">
+        <div class="dir-picker-bar">
+          <button type="button" id="dirPickerUp" class="ghost small" data-i18n="dir.up">上级</button>
+          <nav id="dirPickerBreadcrumb" class="dir-breadcrumb" aria-label="目录路径"></nav>
+        </div>
+        <div id="dirPickerList" class="dir-list"></div>
+        <div id="dirPickerTruncated" class="dir-truncated muted hidden"></div>
+      </div>
+      <div class="modal-actions">
+        <div></div>
+        <div>
+          <button type="button" class="ghost" data-close data-i18n="btn.cancel">取消</button>
+          <button type="button" id="dirPickerSelect" class="primary" data-i18n="dir.select_here">选择此目录</button>
+        </div>
+      </div>
     </div>
   </div>
 

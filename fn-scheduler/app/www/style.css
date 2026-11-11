@@ -681,6 +681,7 @@ label>span:after {
 
 input[type="text"],
 input[type="number"],
+input[type="password"],
 select,
 textarea {
   width: 100%;
@@ -697,6 +698,7 @@ textarea {
 /* 统一表单控件高度，保证同一行内的输入/选择/按钮垂直对齐 */
 input[type="text"],
 input[type="number"],
+input[type="password"],
 select {
   height: 36px;
   line-height: 1.2;
@@ -728,6 +730,7 @@ button.small,
 
 input[type="text"]:focus,
 input[type="number"]:focus,
+input[type="password"]:focus,
 select:focus,
 textarea:focus {
   outline: none;
@@ -1255,6 +1258,399 @@ small {
   position: sticky;
   top: 0;
   z-index: 12;
+}
+
+/* ---------------------------------------------------------------
+   spec-040：任务类型切换 / rclone 表单 / 目录选择器 / 结果统计 / HA 上报
+   --------------------------------------------------------------- */
+
+/* 任务类型切换 */
+.kind-switch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+
+.kind-switch-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+label.kind-option {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+label.kind-option input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+}
+
+label.kind-option.kind-option-active {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+  color: var(--primary);
+}
+
+/* rclone 表单 */
+.rclone-section {
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.path-wrapper {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.path-wrapper input,
+.path-wrapper select {
+  flex: 1;
+}
+
+.path-wrapper button {
+  flex: 0 0 auto;
+}
+
+.rclone-notice {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 600;
+}
+
+.field-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-top: -2px;
+}
+
+.field-hint-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.field-hint-ok {
+  color: var(--success);
+}
+
+.mode-hint {
+  font-weight: 600;
+}
+
+.mode-hint-danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.sync-confirm {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+label.checkbox-option {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+label.checkbox-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+label.checkbox-option-block {
+  display: flex;
+  margin-bottom: 0;
+}
+
+.rclone-advanced {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--field);
+}
+
+.rclone-advanced summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  list-style: none;
+}
+
+.rclone-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.rclone-advanced summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+
+.rclone-advanced[open] summary::before {
+  content: "▾ ";
+}
+
+.rclone-advanced[open] summary {
+  margin-bottom: 12px;
+}
+
+/* 任务表新增列 */
+.kind-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.kind-rclone {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary);
+}
+
+.kind-script {
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.target-text {
+  display: inline-block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.result-summary {
+  display: inline-block;
+  max-width: 260px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 结果状态补充色 */
+.status-partial {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-dry-run {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.status-skipped {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* 结果详情统计卡片 */
+.result-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 92px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* 目录选择器 */
+.dir-picker {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dir-picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dir-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.dir-crumb {
+  min-height: 26px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dir-crumb:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.dir-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 4px;
+}
+
+.dir-entry {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.dir-entry::before {
+  content: "/";
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.dir-entry:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.dir-empty {
+  padding: 20px 12px;
+  text-align: center;
+}
+
+.dir-truncated {
+  font-size: 12px;
+}
+
+/* 设置页 HA 上报 */
+.report-status {
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.report-status-warn {
+  border-left: 3px solid var(--danger);
+}
+
+.report-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.report-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-status-item strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.report-status-error {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.report-error-text {
+  font-size: 12px;
+  color: var(--danger);
+  word-break: break-word;
+}
+
+.report-status-actions {
+  margin-top: 10px;
 }
 
 /* 响应式设计 */

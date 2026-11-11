@@ -265,6 +265,109 @@ const I18N = {
     "results.loading_log": "加载中...",
     "results.log_truncated": "日志较大，已显示前 {limit} 个字符，总长度 {n}。",
     "results.log_full": "当前已显示完整日志。",
+    "table.kind": "类型",
+    "table.target": "目标",
+    "table.result_summary": "上次结果",
+    "btn.dry_run": "试运行",
+    "field.task_kind": "任务类型",
+    "kind.script": "脚本任务",
+    "kind.rclone": "rclone 备份/同步",
+    "kind.script_short": "脚本",
+    "kind.rclone_short": "rclone",
+    "field.rclone.source": "源目录",
+    "field.rclone.dest_remote": "目标 remote",
+    "field.rclone.dest_path": "目标路径",
+    "field.rclone.mode": "执行模式",
+    "rclone.source.browse": "浏览",
+    "rclone.dest.path_hint": "留空表示 remote 根目录",
+    "rclone.mode.copy": "只增不删（copy）",
+    "rclone.mode.sync": "镜像（sync，会删除目标多余文件）",
+    "rclone.mode.check": "仅校验（check）",
+    "rclone.mode.copy.hint": "只把源端有、目标端没有的文件传上去，不删除目标端任何文件。",
+    "rclone.mode.sync.hint": "会让目标端与源端完全一致：目标端多出来的文件会被删除。",
+    "rclone.mode.check.hint": "只比对源与目标，不写入任何数据。",
+    "rclone.sync.confirm": "我知道会删除目标端多余文件",
+    "rclone.sync.blocked": "勾选确认后才能保存 sync 任务",
+    "rclone.remotes.loading": "正在读取 remote...",
+    "rclone.remotes.empty": "还没有配置任何 remote",
+    "rclone.remotes.select": "请选择 remote",
+    "rclone.capability.missing": "本机 rclone 缺少必要参数：{flags}",
+    "rclone.capability.unavailable": "本机没有可用的 rclone（{bin}）",
+    "rclone.capability.hint": "请在 NAS 上安装 rclone，或到设置页调整 rclone 路径。",
+    "rclone.probe.checking": "正在检查目标...",
+    "rclone.probe.ok": "目标可达",
+    "rclone.probe.failed": "目标自检失败：{message}（仍会保存，可等远端恢复后再运行）",
+    "rclone.advanced": "高级选项",
+    "field.rclone.bwlimit": "带宽限制",
+    "field.rclone.bwlimit_hint": "例如 10M、1.5M、off",
+    "field.rclone.transfers": "并发传输数",
+    "field.rclone.checkers": "校验并发数",
+    "field.rclone.exclude": "排除规则（每行一条）",
+    "field.rclone.include": "包含规则（每行一条）",
+    "field.rclone.max_age": "文件年龄上限",
+    "field.rclone.max_age_hint": "例如 30d、12h",
+    "field.rclone.min_size": "最小文件大小",
+    "field.rclone.min_size_hint": "例如 1M、512K",
+    "field.rclone.links": "软链接策略",
+    "field.rclone.backup_dir": "删除前保留副本目录",
+    "field.rclone.backup_dir_hint": "remote:路径，例如 onedrive:Photos-old",
+    "field.rclone.dry_run": "默认试运行（--dry-run）",
+    "rclone.links.default": "默认（不传参数）",
+    "rclone.links.skip": "跳过（skip）",
+    "rclone.links.translate": "转为普通文件（translate）",
+    "rclone.links.include": "跟随链接（include）",
+    "validation.rclone_source_required": "请选择源目录",
+    "validation.rclone_dest_required": "请选择目标 remote",
+    "validation.sync_confirm_required": "sync 会删除目标端多余文件，请勾选确认",
+    "dir.title": "选择目录",
+    "dir.subtitle": "只列出子目录，用于选择本地源目录",
+    "dir.up": "上级",
+    "dir.select_here": "选择此目录",
+    "dir.loading_failed": "读取目录失败：{message}",
+    "dir.truncated": "目录项过多，只显示前 {n} 个",
+    "dir.root": "根目录",
+    "msg.dry_run_queued": "已发起试运行",
+    "msg.task_saved_probe_failed": "任务已保存，但目标自检失败：{message}",
+    "status.partial": "部分失败",
+    "status.dry_run": "试运行",
+    "status.skipped": "已跳过",
+    "summary.files": "{n} 个文件",
+    "summary.errors": "{n} 失败",
+    "summary.elapsed": "{s}s",
+    "results.stats.files": "文件数",
+    "results.stats.bytes": "传输字节",
+    "results.stats.errors": "错误数",
+    "results.stats.deleted": "删除数",
+    "results.stats.elapsed": "耗时",
+    "results.stats.exit_code": "退出码",
+    "settings.group.report.title": "HA 上报",
+    "settings.group.report.subtitle": "把任务执行结果推送到 Home Assistant；HA 不可达时事件会进本地队列并自动补发。",
+    "field.settings.ha_base_url": "HA 地址",
+    "field.settings.ha_base_url_hint": "例如 http://192.168.31.5:8123",
+    "field.settings.ha_token": "长期访问令牌",
+    "field.settings.ha_token_hint": "只写不读：界面永不回显已保存的令牌",
+    "field.settings.ha_token_set": "已设置（留空不修改）",
+    "field.settings.ha_token_empty": "未设置",
+    "field.settings.report_mode": "上报模式",
+    "field.settings.rclone_bin": "rclone 路径",
+    "field.settings.rclone_bin_hint": "留空按 rclone 处理；fnOS 实测路径为 /usr/trim/bin/rclone",
+    "field.settings.backup_allowlist": "允许备份的本地根目录",
+    "field.settings.backup_allowlist_hint": "每行一个绝对路径；留空表示不限制。",
+    "report.mode.all": "全部",
+    "report.mode.fail": "仅失败",
+    "report.mode.off": "关闭",
+    "settings.report.status.configured": "配置状态",
+    "settings.report.status.configured_yes": "已配置",
+    "settings.report.status.configured_no": "未配置",
+    "settings.report.status.pending": "待补发",
+    "settings.report.status.sent": "已发送",
+    "settings.report.status.failed": "失败",
+    "settings.report.status.last_attempt": "最近尝试",
+    "settings.report.status.last_error": "最近错误",
+    "settings.report.status.none": "无",
+    "btn.report_test": "发一条测试",
+    "msg.report_test_ok": "测试事件已发送",
+    "msg.report_test_failed": "发送失败：{message}",
   },
   "en-US": {
     "app.title": "Scheduler",
@@ -519,6 +622,122 @@ const I18N = {
     "results.log_truncated":
       "Large log: showing the first {limit} characters out of {n}.",
     "results.log_full": "Showing the full log.",
+    "table.kind": "Type",
+    "table.target": "Target",
+    "table.result_summary": "Last result",
+    "btn.dry_run": "Dry run",
+    "field.task_kind": "Task type",
+    "kind.script": "Script task",
+    "kind.rclone": "rclone backup/sync",
+    "kind.script_short": "Script",
+    "kind.rclone_short": "rclone",
+    "field.rclone.source": "Source directory",
+    "field.rclone.dest_remote": "Target remote",
+    "field.rclone.dest_path": "Target path",
+    "field.rclone.mode": "Mode",
+    "rclone.source.browse": "Browse",
+    "rclone.dest.path_hint": "Leave empty to use the remote root",
+    "rclone.mode.copy": "Copy only (copy)",
+    "rclone.mode.sync": "Mirror (sync, deletes extra files on target)",
+    "rclone.mode.check": "Check only (check)",
+    "rclone.mode.copy.hint":
+      "Uploads files that exist on the source but not on the target; never deletes anything on the target.",
+    "rclone.mode.sync.hint":
+      "Makes the target identical to the source: extra files on the target will be deleted.",
+    "rclone.mode.check.hint":
+      "Compares source and target without writing any data.",
+    "rclone.sync.confirm":
+      "I understand extra files on the target will be deleted",
+    "rclone.sync.blocked":
+      "Tick the confirmation before saving a sync task",
+    "rclone.remotes.loading": "Loading remotes...",
+    "rclone.remotes.empty": "No remotes configured yet",
+    "rclone.remotes.select": "Select a remote",
+    "rclone.capability.missing": "Local rclone is missing required flags: {flags}",
+    "rclone.capability.unavailable": "No usable rclone found ({bin})",
+    "rclone.capability.hint":
+      "Install rclone on the NAS, or adjust the rclone path in Settings.",
+    "rclone.probe.checking": "Checking target...",
+    "rclone.probe.ok": "Target reachable",
+    "rclone.probe.failed":
+      "Target check failed: {message} (the task will still be saved; run it once the remote is reachable)",
+    "rclone.advanced": "Advanced options",
+    "field.rclone.bwlimit": "Bandwidth limit",
+    "field.rclone.bwlimit_hint": "e.g. 10M, 1.5M, off",
+    "field.rclone.transfers": "Transfers",
+    "field.rclone.checkers": "Checkers",
+    "field.rclone.exclude": "Exclude patterns (one per line)",
+    "field.rclone.include": "Include patterns (one per line)",
+    "field.rclone.max_age": "Maximum file age",
+    "field.rclone.max_age_hint": "e.g. 30d, 12h",
+    "field.rclone.min_size": "Minimum file size",
+    "field.rclone.min_size_hint": "e.g. 1M, 512K",
+    "field.rclone.links": "Symlink policy",
+    "field.rclone.backup_dir": "Backup dir for deleted files",
+    "field.rclone.backup_dir_hint": "remote:path, e.g. onedrive:Photos-old",
+    "field.rclone.dry_run": "Dry run by default (--dry-run)",
+    "rclone.links.default": "Default (no flag)",
+    "rclone.links.skip": "Skip (skip)",
+    "rclone.links.translate": "Translate to plain files (translate)",
+    "rclone.links.include": "Include links (include)",
+    "validation.rclone_source_required": "Please choose a source directory",
+    "validation.rclone_dest_required": "Please choose a target remote",
+    "validation.sync_confirm_required":
+      "sync deletes extra files on the target; please tick the confirmation",
+    "dir.title": "Choose directory",
+    "dir.subtitle": "Lists sub-directories only, used to pick the local source",
+    "dir.up": "Parent",
+    "dir.select_here": "Use this directory",
+    "dir.loading_failed": "Failed to read directory: {message}",
+    "dir.truncated": "Too many entries; showing the first {n}",
+    "dir.root": "Root",
+    "msg.dry_run_queued": "Dry run queued",
+    "msg.task_saved_probe_failed":
+      "Task saved, but the target check failed: {message}",
+    "status.partial": "Partial",
+    "status.dry_run": "Dry run",
+    "status.skipped": "Skipped",
+    "summary.files": "{n} files",
+    "summary.errors": "{n} failed",
+    "summary.elapsed": "{s}s",
+    "results.stats.files": "Files",
+    "results.stats.bytes": "Transferred",
+    "results.stats.errors": "Errors",
+    "results.stats.deleted": "Deleted",
+    "results.stats.elapsed": "Elapsed",
+    "results.stats.exit_code": "Exit code",
+    "settings.group.report.title": "HA reporting",
+    "settings.group.report.subtitle":
+      "Push task results to Home Assistant; when HA is unreachable the events are queued locally and re-sent later.",
+    "field.settings.ha_base_url": "HA base URL",
+    "field.settings.ha_base_url_hint": "e.g. http://192.168.31.5:8123",
+    "field.settings.ha_token": "Long-lived access token",
+    "field.settings.ha_token_hint":
+      "Write-only: the saved token is never shown again",
+    "field.settings.ha_token_set": "Already set (leave blank to keep)",
+    "field.settings.ha_token_empty": "Not set",
+    "field.settings.report_mode": "Reporting mode",
+    "field.settings.rclone_bin": "rclone path",
+    "field.settings.rclone_bin_hint":
+      "Leave blank to use rclone; on fnOS the path is /usr/trim/bin/rclone",
+    "field.settings.backup_allowlist": "Allowed local backup roots",
+    "field.settings.backup_allowlist_hint":
+      "One absolute path per line; leave blank for no restriction.",
+    "report.mode.all": "All",
+    "report.mode.fail": "Failures only",
+    "report.mode.off": "Off",
+    "settings.report.status.configured": "Configuration",
+    "settings.report.status.configured_yes": "Configured",
+    "settings.report.status.configured_no": "Not configured",
+    "settings.report.status.pending": "Pending",
+    "settings.report.status.sent": "Sent",
+    "settings.report.status.failed": "Failed",
+    "settings.report.status.last_attempt": "Last attempt",
+    "settings.report.status.last_error": "Last error",
+    "settings.report.status.none": "None",
+    "btn.report_test": "Send a test",
+    "msg.report_test_ok": "Test event sent",
+    "msg.report_test_failed": "Send failed: {message}",
   },
 };
 
@@ -635,6 +854,39 @@ const elements = {
   cronPreview: document.getElementById("cronPreview"),
   cronNextTimes: document.getElementById("cronNextTimes"),
   scheduleInput: document.querySelector('input[name="schedule_expression"]'),
+  // spec-040：rclone 任务表单
+  taskKindInputs: document.querySelectorAll('input[name="task_kind"]'),
+  taskSubmit: document.querySelector('#taskForm button[type="submit"]'),
+  rcloneEnvNotice: document.getElementById("rcloneEnvNotice"),
+  rcloneSource: document.getElementById("rcloneSource"),
+  rcloneRemote: document.getElementById("rcloneRemote"),
+  rcloneDestPath: document.getElementById("rcloneDestPath"),
+  rcloneMode: document.getElementById("rcloneMode"),
+  rcloneModeHint: document.getElementById("rcloneModeHint"),
+  rcloneProbe: document.getElementById("rcloneProbe"),
+  rcloneBwlimit: document.getElementById("rcloneBwlimit"),
+  rcloneTransfers: document.getElementById("rcloneTransfers"),
+  rcloneCheckers: document.getElementById("rcloneCheckers"),
+  rcloneExclude: document.getElementById("rcloneExclude"),
+  rcloneInclude: document.getElementById("rcloneInclude"),
+  rcloneMaxAge: document.getElementById("rcloneMaxAge"),
+  rcloneMinSize: document.getElementById("rcloneMinSize"),
+  rcloneLinks: document.getElementById("rcloneLinks"),
+  rcloneBackupDir: document.getElementById("rcloneBackupDir"),
+  rcloneDryRun: document.getElementById("rcloneDryRun"),
+  syncConfirmBox: document.getElementById("syncConfirmBox"),
+  syncConfirm: document.getElementById("syncConfirm"),
+  syncConfirmHint: document.getElementById("syncConfirmHint"),
+  // 目录选择器
+  dirPickerModal: document.getElementById("dirPickerModal"),
+  dirPickerUp: document.getElementById("dirPickerUp"),
+  dirPickerBreadcrumb: document.getElementById("dirPickerBreadcrumb"),
+  dirPickerList: document.getElementById("dirPickerList"),
+  dirPickerTruncated: document.getElementById("dirPickerTruncated"),
+  dirPickerSelect: document.getElementById("dirPickerSelect"),
+  // 设置页 HA 上报
+  reportStatusBox: document.getElementById("reportStatusBox"),
+  reportTestBtn: document.getElementById("btnReportTest"),
 };
 
 let taskTemplates = {};
@@ -1149,6 +1401,7 @@ const buttons = {
   edit: document.getElementById("btnEdit"),
   delete: document.getElementById("btnDelete"),
   run: document.getElementById("btnRun"),
+  dryRun: document.getElementById("btnDryRun"),
   stop: document.getElementById("btnStop"),
   toggle: document.getElementById("btnToggle"),
   results: document.getElementById("btnResults"),
@@ -1174,6 +1427,9 @@ const statusMap = {
   running: { label: "status.running", className: "status-running" },
   success: { label: "status.success", className: "status-success" },
   failed: { label: "status.failed", className: "status-failed" },
+  partial: { label: "status.partial", className: "status-partial" },
+  dry_run: { label: "status.dry_run", className: "status-dry-run" },
+  skipped: { label: "status.skipped", className: "status-skipped" },
   condition_failed: {
     label: "status.condition_failed",
     className: "status-condition-failed",
@@ -1188,8 +1444,11 @@ const taskStatusPriority = {
   running: 0,
   success: 1,
   failed: 2,
-  condition_failed: 3,
-  pretask_failed: 4,
+  partial: 3,
+  dry_run: 4,
+  skipped: 5,
+  condition_failed: 6,
+  pretask_failed: 7,
 };
 
 const SORT_DIRECTIONS = {
@@ -1232,6 +1491,14 @@ function getTaskSortValue(task, key) {
       return getTaskTriggerLabel(task);
     case "latest_status":
       return getTaskSortPriority(task);
+    case "kind":
+      return task.task_kind === "rclone" ? t("kind.rclone_short") : t("kind.script_short");
+    case "target":
+      return task.task_kind === "rclone" ? String(task.rclone?.dest || "") : "";
+    case "result":
+      return task.task_kind === "rclone"
+        ? buildResultSummary(getTaskStats(task))
+        : "";
     case "account":
       return String(task.account || "");
     default:
@@ -1384,6 +1651,674 @@ function escapeHtml(value = "") {
   });
 }
 
+/* ---------------------------------------------------------------------------
+ * spec-040：rclone 任务（remote 列表 / 目录选择器 / 保存前自检 / 结果统计）
+ * ------------------------------------------------------------------------ */
+
+const RCLONE_DEFAULT_MODE = "copy";
+
+const rcloneState = {
+  loaded: false,
+  loading: false,
+  remotes: [],
+  detail: null,
+  message: "",
+};
+
+const dirPickerState = {
+  path: "/",
+  parent: null,
+  onSelect: null,
+};
+
+// 「上次结果摘要」用的 stats 缓存：key = 任务 id + 结束时间，避免每次刷新重复拉取。
+const latestStatsCache = new Map();
+const latestStatsInflight = new Set();
+const LATEST_STATS_CACHE_MAX = 500;
+
+function toOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function formatBytes(value) {
+  const num = toOptionalNumber(value);
+  if (num === null || num < 0) return "";
+  if (num < 1024) return `${num} B`;
+  const units = ["KB", "MB", "GB", "TB", "PB"];
+  let size = num / 1024;
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  const digits = size >= 10 ? 0 : 1;
+  return `${size.toFixed(digits)} ${units[index]}`;
+}
+
+// 后端把 stats 存成 JSON 字符串，这里兼容字符串与对象两种形态。
+function parseResultStats(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+// 缺字段就不显示该段——不用 0 顶替缺失值（rclone 的统计块会整行省掉 0 值）。
+function buildResultSummary(stats) {
+  const data = parseResultStats(stats);
+  if (!data) return "";
+  const parts = [];
+  const files = toOptionalNumber(data.files);
+  if (files !== null) parts.push(t("summary.files", { n: files }));
+  const bytes = toOptionalNumber(data.bytes);
+  if (bytes !== null) {
+    const formatted = formatBytes(bytes);
+    if (formatted) parts.push(formatted);
+  }
+  const errors = toOptionalNumber(data.errors);
+  if (errors !== null) parts.push(t("summary.errors", { n: errors }));
+  const elapsed = toOptionalNumber(data.elapsed_seconds);
+  if (elapsed !== null) {
+    const rounded = elapsed >= 10 ? elapsed.toFixed(0) : elapsed.toFixed(1);
+    parts.push(t("summary.elapsed", { s: rounded }));
+  }
+  return parts.join(" · ");
+}
+
+function latestStatsKey(task) {
+  const finished = task?.latest_result?.finished_at || "";
+  return `${task?.id ?? ""}:${finished}`;
+}
+
+// 结果详情里的统计卡片：只渲染真实存在的字段，缺的就不显示。
+function buildResultStatsCard(result) {
+  const stats = parseResultStats(result?.stats) || {};
+  const cells = [];
+  const push = (labelKey, value) => {
+    if (value === null || value === undefined || value === "") return;
+    cells.push([t(labelKey), String(value)]);
+  };
+  push("results.stats.files", toOptionalNumber(stats.files));
+  const bytes = toOptionalNumber(stats.bytes);
+  if (bytes !== null) push("results.stats.bytes", formatBytes(bytes));
+  push("results.stats.errors", toOptionalNumber(stats.errors));
+  push("results.stats.deleted", toOptionalNumber(stats.deleted));
+  const elapsed = toOptionalNumber(stats.elapsed_seconds);
+  if (elapsed !== null) {
+    push(
+      "results.stats.elapsed",
+      t("summary.elapsed", {
+        s: elapsed >= 10 ? elapsed.toFixed(0) : elapsed.toFixed(1),
+      }),
+    );
+  }
+  push("results.stats.exit_code", toOptionalNumber(result?.exit_code));
+  if (!cells.length) return null;
+  const box = document.createElement("div");
+  box.className = "result-stats";
+  cells.forEach(([label, value]) => {
+    const cell = document.createElement("div");
+    cell.className = "stat-cell";
+    const labelEl = document.createElement("span");
+    labelEl.className = "stat-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.className = "stat-value";
+    valueEl.textContent = value;
+    cell.appendChild(labelEl);
+    cell.appendChild(valueEl);
+    box.appendChild(cell);
+  });
+  return box;
+}
+
+function getTaskStats(task) {
+  const direct = parseResultStats(task?.latest_result?.stats);
+  if (direct) return direct;
+  const cached = latestStatsCache.get(latestStatsKey(task));
+  return cached || null;
+}
+
+// 列表接口的 latest_result 是「快照」，不含 stats。这里按任务补拉一次最近结果，
+// key 里带 finished_at，所以每条新结果只多一次请求，不会随 5s 自动刷新反复拉。
+async function enrichLatestStats() {
+  const pending = state.tasks.filter(
+    (task) =>
+      task.task_kind === "rclone" &&
+      task.latest_result &&
+      !parseResultStats(task.latest_result.stats),
+  );
+  if (!pending.length) return;
+  if (latestStatsCache.size > LATEST_STATS_CACHE_MAX) latestStatsCache.clear();
+  let changed = false;
+  for (const task of pending) {
+    const key = latestStatsKey(task);
+    if (latestStatsCache.has(key) || latestStatsInflight.has(key)) continue;
+    latestStatsInflight.add(key);
+    try {
+      const response = await api("list-results", {
+        id: task.id,
+        limit: 1,
+        offset: 0,
+        summary: 1,
+      });
+      const row = Array.isArray(response?.data) ? response.data[0] : null;
+      // 只认「同一次执行」的结果：结果记录可能被保留策略清掉，
+      // 这时 list-results 的首条是更早的一次，用它当摘要会误导。
+      const sameRun =
+        row &&
+        (!task.latest_result.finished_at ||
+          row.finished_at === task.latest_result.finished_at);
+      latestStatsCache.set(key, sameRun ? parseResultStats(row.stats) : null);
+    } catch (_err) {
+      latestStatsCache.set(key, null);
+    } finally {
+      latestStatsInflight.delete(key);
+    }
+    changed = true;
+  }
+  if (changed) renderTasks();
+}
+
+function renderRemoteOptions(selected = "") {
+  const select = elements.rcloneRemote;
+  if (!select) return;
+  select.innerHTML = "";
+  const remotes = rcloneState.remotes || [];
+  if (!remotes.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = rcloneState.loading
+      ? t("rclone.remotes.loading")
+      : t("rclone.remotes.empty");
+    option.disabled = true;
+    option.selected = true;
+    select.appendChild(option);
+    select.disabled = true;
+    return;
+  }
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = t("rclone.remotes.select");
+  select.appendChild(placeholder);
+  remotes.forEach((remote) => {
+    const name = String(remote?.name || "");
+    if (!name) return;
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = remote.type ? `${name} (${remote.type})` : name;
+    select.appendChild(option);
+  });
+  select.disabled = false;
+  if (selected) {
+    const exists = Array.from(select.options).some(
+      (opt) => opt.value === selected,
+    );
+    select.value = exists ? selected : "";
+  }
+}
+
+// 明确说明「为什么没有 remote 可选」，不给一个空下拉。
+function renderRcloneEnvironment() {
+  const notice = elements.rcloneEnvNotice;
+  if (!notice) return;
+  if (rcloneState.loading) {
+    notice.textContent = t("rclone.remotes.loading");
+    notice.className = "rclone-notice muted";
+    notice.classList.remove("hidden");
+    return;
+  }
+  const detail = rcloneState.detail || {};
+  const lines = [];
+  if (detail.available === false) {
+    lines.push(
+      t("rclone.capability.unavailable", { bin: detail.bin || "rclone" }),
+    );
+    if (detail.message) lines.push(detail.message);
+    lines.push(t("rclone.capability.hint"));
+  } else {
+    if (detail.usable === false) {
+      const missing = Array.isArray(detail.missing)
+        ? detail.missing.filter(Boolean).join(", ")
+        : "";
+      lines.push(t("rclone.capability.missing", { flags: missing || "?" }));
+      lines.push(t("rclone.capability.hint"));
+    }
+    if (!(rcloneState.remotes || []).length) {
+      lines.push(rcloneState.message || t("rclone.remotes.empty"));
+    }
+  }
+  if (!lines.length) {
+    notice.textContent = "";
+    notice.classList.add("hidden");
+    return;
+  }
+  notice.innerHTML = lines
+    .map((line) => `<div>${escapeHtml(line)}</div>`)
+    .join("");
+  notice.className = "rclone-notice";
+  notice.classList.remove("hidden");
+}
+
+async function loadRemotes({ force = false } = {}) {
+  if (rcloneState.loading) return;
+  if (rcloneState.loaded && !force) {
+    renderRemoteOptions(elements.rcloneRemote?.value || "");
+    renderRcloneEnvironment();
+    return;
+  }
+  rcloneState.loading = true;
+  renderRcloneEnvironment();
+  try {
+    const payload = await api("list-remotes");
+    rcloneState.remotes = Array.isArray(payload?.remotes) ? payload.remotes : [];
+    rcloneState.detail = payload?.rclone || null;
+    rcloneState.message = payload?.message || payload?.warning || "";
+  } catch (error) {
+    rcloneState.remotes = [];
+    rcloneState.detail = { available: false, message: error.message };
+    rcloneState.message = error.message;
+  } finally {
+    rcloneState.loading = false;
+    rcloneState.loaded = true;
+    renderRemoteOptions(elements.rcloneRemote?.value || "");
+    renderRcloneEnvironment();
+  }
+}
+
+function splitLines(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function getTaskKind() {
+  const checked = elements.taskForm?.querySelector(
+    'input[name="task_kind"]:checked',
+  );
+  return checked?.value === "rclone" ? "rclone" : "script";
+}
+
+function setTaskKind(kind) {
+  const value = kind === "rclone" ? "rclone" : "script";
+  elements.taskKindInputs?.forEach((input) => {
+    input.checked = input.value === value;
+  });
+  document.querySelectorAll(".kind-switch label.kind-option").forEach((label) => {
+    const input = label.querySelector("input");
+    label.classList.toggle(
+      "kind-option-active",
+      Boolean(input && input.checked),
+    );
+  });
+  document.querySelectorAll("[data-kind-section]").forEach((section) => {
+    section.classList.toggle(
+      "hidden",
+      section.getAttribute("data-kind-section") !== value,
+    );
+  });
+  // 脚本内容只在脚本任务里必填，否则浏览器的原生校验会挡住 rclone 表单。
+  if (elements.taskForm?.script_body) {
+    elements.taskForm.script_body.required = value === "script";
+  }
+  if (value === "rclone") loadRemotes();
+  updateRcloneModeUI();
+}
+
+function updateRcloneModeUI() {
+  const mode = elements.rcloneMode?.value || RCLONE_DEFAULT_MODE;
+  if (elements.rcloneModeHint) {
+    elements.rcloneModeHint.textContent = t(`rclone.mode.${mode}.hint`);
+    elements.rcloneModeHint.classList.toggle(
+      "mode-hint-danger",
+      mode === "sync",
+    );
+  }
+  const isSync = getTaskKind() === "rclone" && mode === "sync";
+  if (elements.syncConfirmBox) {
+    elements.syncConfirmBox.classList.toggle("hidden", !isSync);
+  }
+  updateSyncConfirmState();
+}
+
+function updateSyncConfirmState() {
+  const isSync =
+    getTaskKind() === "rclone" &&
+    (elements.rcloneMode?.value || "") === "sync";
+  const confirmed = Boolean(elements.syncConfirm?.checked);
+  const blocked = isSync && !confirmed;
+  if (elements.taskSubmit) elements.taskSubmit.disabled = blocked;
+  if (elements.syncConfirmHint) {
+    elements.syncConfirmHint.classList.toggle("hidden", !blocked);
+  }
+}
+
+function setProbeMessage(text, tone) {
+  const el = elements.rcloneProbe;
+  if (!el) return;
+  if (!text) {
+    el.textContent = "";
+    el.className = "field-hint hidden";
+    return;
+  }
+  el.textContent = text;
+  el.className = "field-hint";
+  if (tone === "error") el.classList.add("field-hint-error");
+  if (tone === "ok") el.classList.add("field-hint-ok");
+}
+
+// 保存前自检（R4）。失败只提示，不阻止保存：远端可能只是暂时不可达。
+async function probeDest(dest) {
+  setProbeMessage(t("rclone.probe.checking"), "muted");
+  try {
+    const payload = await api("probe-remote", { dest });
+    if (payload?.ok) {
+      setProbeMessage(t("rclone.probe.ok"), "ok");
+      return { ok: true, message: "" };
+    }
+    const message = payload?.message || payload?.code || "";
+    setProbeMessage(t("rclone.probe.failed", { message }), "error");
+    return { ok: false, message };
+  } catch (error) {
+    setProbeMessage(t("rclone.probe.failed", { message: error.message }), "error");
+    return { ok: false, message: error.message };
+  }
+}
+
+function fillRcloneFields(config = {}) {
+  const cfg = config || {};
+  if (elements.rcloneSource) elements.rcloneSource.value = cfg.source || "";
+  if (elements.rcloneMode) elements.rcloneMode.value = cfg.mode || RCLONE_DEFAULT_MODE;
+  if (elements.rcloneBwlimit) {
+    elements.rcloneBwlimit.value = cfg.bwlimit || "";
+  }
+  if (elements.rcloneTransfers) {
+    elements.rcloneTransfers.value =
+      cfg.transfers === undefined || cfg.transfers === null
+        ? ""
+        : String(cfg.transfers);
+  }
+  if (elements.rcloneCheckers) {
+    elements.rcloneCheckers.value =
+      cfg.checkers === undefined || cfg.checkers === null
+        ? ""
+        : String(cfg.checkers);
+  }
+  if (elements.rcloneExclude) {
+    elements.rcloneExclude.value = Array.isArray(cfg.exclude)
+      ? cfg.exclude.join("\n")
+      : "";
+  }
+  if (elements.rcloneInclude) {
+    elements.rcloneInclude.value = Array.isArray(cfg.include)
+      ? cfg.include.join("\n")
+      : "";
+  }
+  if (elements.rcloneMaxAge) elements.rcloneMaxAge.value = cfg.max_age || "";
+  if (elements.rcloneMinSize) elements.rcloneMinSize.value = cfg.min_size || "";
+  if (elements.rcloneLinks) elements.rcloneLinks.value = cfg.links || "";
+  if (elements.rcloneBackupDir) {
+    elements.rcloneBackupDir.value = cfg.backup_dir || "";
+  }
+  if (elements.rcloneDryRun) elements.rcloneDryRun.checked = Boolean(cfg.dry_run);
+  setProbeMessage("");
+  updateRcloneModeUI();
+}
+
+// 把 dest（remote:path）拆回两个字段；remote 不在列表里时补一个选项，
+// 保证「本机暂时读不到 remote」时编辑旧任务不会把目标清空。
+function applyDestToForm(dest) {
+  const text = String(dest || "");
+  const index = text.indexOf(":");
+  const remote = index >= 0 ? text.slice(0, index) : text;
+  const path = index >= 0 ? text.slice(index + 1) : "";
+  if (elements.rcloneDestPath) elements.rcloneDestPath.value = path;
+  const select = elements.rcloneRemote;
+  if (!select || !remote) return;
+  const exists = Array.from(select.options).some(
+    (opt) => opt.value === remote,
+  );
+  if (!exists) {
+    const option = document.createElement("option");
+    option.value = remote;
+    option.textContent = remote;
+    select.appendChild(option);
+    select.disabled = false;
+  }
+  select.value = remote;
+}
+
+function collectRcloneConfig() {
+  const remote = (elements.rcloneRemote?.value || "").trim();
+  const path = (elements.rcloneDestPath?.value || "")
+    .trim()
+    .replace(/^\/+/, "");
+  const config = {
+    mode: elements.rcloneMode?.value || RCLONE_DEFAULT_MODE,
+    source: (elements.rcloneSource?.value || "").trim(),
+    dest: remote ? `${remote}:${path}` : "",
+    bwlimit: (elements.rcloneBwlimit?.value || "").trim(),
+    exclude: splitLines(elements.rcloneExclude?.value),
+    include: splitLines(elements.rcloneInclude?.value),
+    max_age: (elements.rcloneMaxAge?.value || "").trim(),
+    min_size: (elements.rcloneMinSize?.value || "").trim(),
+    links: elements.rcloneLinks?.value || "",
+    backup_dir: (elements.rcloneBackupDir?.value || "").trim(),
+    dry_run: Boolean(elements.rcloneDryRun?.checked),
+  };
+  const transfers = toOptionalNumber(elements.rcloneTransfers?.value);
+  if (transfers !== null) config.transfers = transfers;
+  const checkers = toOptionalNumber(elements.rcloneCheckers?.value);
+  if (checkers !== null) config.checkers = checkers;
+  return config;
+}
+
+/* 目录选择器（fs-list） ------------------------------------------------- */
+
+function renderDirBreadcrumb(path) {
+  const nav = elements.dirPickerBreadcrumb;
+  if (!nav) return;
+  nav.innerHTML = "";
+  const segments = String(path || "/")
+    .split("/")
+    .filter(Boolean);
+  const rootBtn = document.createElement("button");
+  rootBtn.type = "button";
+  rootBtn.className = "dir-crumb";
+  rootBtn.dataset.path = "/";
+  rootBtn.textContent = "/";
+  rootBtn.title = t("dir.root");
+  nav.appendChild(rootBtn);
+  let accumulated = "";
+  segments.forEach((segment) => {
+    accumulated += `/${segment}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dir-crumb";
+    btn.dataset.path = accumulated;
+    btn.textContent = segment;
+    nav.appendChild(btn);
+  });
+}
+
+function renderDirEntries(entries, truncated) {
+  const list = elements.dirPickerList;
+  if (!list) return;
+  list.innerHTML = "";
+  if (!entries.length) {
+    list.innerHTML = `<div class="dir-empty muted">${escapeHtml(t("empty.no_files"))}</div>`;
+  } else {
+    entries.forEach((entry) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "dir-entry";
+      btn.dataset.path = entry.path || "";
+      btn.textContent = entry.name || "";
+      list.appendChild(btn);
+    });
+  }
+  if (elements.dirPickerTruncated) {
+    if (truncated) {
+      elements.dirPickerTruncated.textContent = t("dir.truncated", {
+        n: entries.length,
+      });
+      elements.dirPickerTruncated.classList.remove("hidden");
+    } else {
+      elements.dirPickerTruncated.textContent = "";
+      elements.dirPickerTruncated.classList.add("hidden");
+    }
+  }
+}
+
+async function loadDirList(path) {
+  const list = elements.dirPickerList;
+  if (!list) return;
+  const target = path || "/";
+  dirPickerState.path = target;
+  renderDirBreadcrumb(target);
+  list.innerHTML = `<div class="dir-empty muted">${escapeHtml(t("loading"))}</div>`;
+  try {
+    const payload = await api("fs-list", {
+      path: target,
+      dirs_only: true,
+    });
+    dirPickerState.path = payload?.path || target;
+    dirPickerState.parent =
+      payload?.parent === undefined ? null : payload.parent;
+    renderDirBreadcrumb(dirPickerState.path);
+    if (elements.dirPickerUp) {
+      elements.dirPickerUp.disabled = !dirPickerState.parent;
+    }
+    const entries = Array.isArray(payload?.entries)
+      ? payload.entries.filter((entry) => entry && entry.is_dir !== false)
+      : [];
+    renderDirEntries(entries, Boolean(payload?.truncated));
+  } catch (error) {
+    // 读不到也允许退回上级：parent 按路径本地推导
+    dirPickerState.parent =
+      target === "/" ? null : target.replace(/\/[^/]+\/?$/, "") || "/";
+    if (elements.dirPickerUp) {
+      elements.dirPickerUp.disabled = !dirPickerState.parent;
+    }
+    list.innerHTML = `<div class="dir-empty muted">${escapeHtml(
+      t("dir.loading_failed", { message: error.message }),
+    )}</div>`;
+  }
+}
+
+async function openDirPicker(startPath, onSelect) {
+  const modal = elements.dirPickerModal;
+  if (!modal) return;
+  dirPickerState.onSelect = typeof onSelect === "function" ? onSelect : null;
+  renderDirBreadcrumb(startPath || "/");
+  openModal(modal);
+  await loadDirList(startPath || "/");
+}
+
+/* 试运行（R12） -------------------------------------------------------- */
+
+async function dryRunSelectedTask() {
+  const selected = Array.from(state.selectedIds);
+  if (selected.length !== 1) {
+    showToast(t("prompt.select_single_task"));
+    return;
+  }
+  const task = state.tasks.find((item) => item.id === selected[0]);
+  if (!task) {
+    showToast(t("error.task_not_found"), true);
+    return;
+  }
+  try {
+    await api("run-task", { id: task.id, dry_run: true });
+    showToast(t("msg.dry_run_queued"));
+    await loadTasks({ silent: true });
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+/* 设置页 HA 上报 ------------------------------------------------------- */
+
+function setReportStatusField(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function renderReportStatus(payload) {
+  const data = payload || {};
+  const configured = Boolean(data.configured);
+  setReportStatusField(
+    "reportStatusConfigured",
+    configured
+      ? t("settings.report.status.configured_yes")
+      : t("settings.report.status.configured_no"),
+  );
+  const pending = toOptionalNumber(data.pending);
+  setReportStatusField(
+    "reportStatusPending",
+    pending === null ? t("settings.report.status.none") : String(pending),
+  );
+  const sent = toOptionalNumber(data.sent);
+  setReportStatusField(
+    "reportStatusSent",
+    sent === null ? t("settings.report.status.none") : String(sent),
+  );
+  const failed = toOptionalNumber(data.failed);
+  setReportStatusField(
+    "reportStatusFailed",
+    failed === null ? t("settings.report.status.none") : String(failed),
+  );
+  setReportStatusField(
+    "reportStatusLastAttempt",
+    data.last_attempt_at ? formatDate(data.last_attempt_at) : t("settings.report.status.none"),
+  );
+  setReportStatusField(
+    "reportStatusLastError",
+    data.last_error || t("settings.report.status.none"),
+  );
+  if (elements.reportStatusBox) {
+    elements.reportStatusBox.classList.toggle("report-status-warn", Boolean(data.last_error));
+  }
+}
+
+async function refreshReportStatus() {
+  if (!elements.reportStatusBox) return;
+  try {
+    const payload = await api("report-status");
+    renderReportStatus(payload);
+  } catch (error) {
+    renderReportStatus({ configured: false, last_error: error.message });
+  }
+}
+
+async function sendReportTest() {
+  const btn = elements.reportTestBtn;
+  if (btn) btn.disabled = true;
+  try {
+    const payload = await api("report-test");
+    if (payload?.ok) {
+      showToast(t("msg.report_test_ok"));
+    } else {
+      showToast(
+        t("msg.report_test_failed", { message: payload?.message || "" }),
+        true,
+      );
+    }
+    await refreshReportStatus();
+  } catch (error) {
+    showToast(t("msg.report_test_failed", { message: error.message }), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function applyModalI18n(modal) {
   if (!modal) return;
   // apply data-i18n and data-i18n-attr within modal
@@ -1470,6 +2405,12 @@ function renderTasks() {
     const statusLabel = t(status.label);
     const safeName = escapeHtml(task.name);
     const safeAccount = escapeHtml(task.account);
+    const isRclone = task.task_kind === "rclone";
+    const kindLabel = t(isRclone ? "kind.rclone_short" : "kind.script_short");
+    const targetText = isRclone ? String(task.rclone?.dest || "") : "";
+    const summaryText = isRclone
+      ? buildResultSummary(getTaskStats(task))
+      : "";
     let triggerLabel = getTaskTriggerLabel(task);
     if (task.trigger_type === "event") {
       if (isNarrow()) {
@@ -1482,6 +2423,9 @@ function renderTasks() {
             <td>
                 <div class="task-name">${safeName}</div>
             </td>
+            <td><span class="kind-pill ${isRclone ? "kind-rclone" : "kind-script"}">${escapeHtml(kindLabel)}</span></td>
+            <td><span class="target-text" title="${escapeHtml(targetText)}">${escapeHtml(targetText)}</span></td>
+            <td><span class="result-summary">${escapeHtml(summaryText)}</span></td>
             <td>${escapeHtml(formatDate(task.next_run_at))}</td>
                 <td><span class="trigger-label">${escapeHtml(triggerLabel)}</span></td>
             <td><span class="status-pill ${status.className}">${escapeHtml(statusLabel)}</span></td>
@@ -1496,6 +2440,7 @@ function updateToolbarState() {
   const selectedCount = state.selectedIds.size;
   buttons.edit.disabled = selectedCount !== 1;
   buttons.run.disabled = selectedCount === 0;
+  if (buttons.dryRun) buttons.dryRun.disabled = selectedCount !== 1;
   buttons.stop.disabled = selectedCount === 0;
   buttons.delete.disabled = selectedCount === 0;
   buttons.toggle.disabled = selectedCount === 0;
@@ -1833,6 +2778,7 @@ function openTaskModal(task = null) {
     loadAccounts({ showError: false, preferredAccount });
   }
   populatePreTaskOptions(state.editingTaskId, task?.pre_task_ids || []);
+  const kind = task?.task_kind === "rclone" ? "rclone" : "script";
   if (task) {
     elements.taskModalTitle.textContent = `${t("btn.edit")}：${task.name}`;
     elements.taskForm.name.value = task.name;
@@ -1849,6 +2795,10 @@ function openTaskModal(task = null) {
     elements.taskForm.condition_script.value = task.condition_script || "";
     elements.taskForm.condition_interval.value = task.condition_interval || 60;
     elements.taskForm.script_body.value = task.script_body || "";
+    if (kind === "rclone") {
+      fillRcloneFields(task.rclone || {});
+      loadRemotes().then(() => applyDestToForm(task.rclone?.dest || ""));
+    }
   } else {
     elements.taskModalTitle.textContent = t("modal.task.new");
     elements.eventTypeSelect.value = "system_shutdown";
@@ -1858,7 +2808,10 @@ function openTaskModal(task = null) {
     if (elements.scheduleInput) {
       elements.scheduleInput.value = DEFAULT_SCHEDULE_EXPRESSION;
     }
+    fillRcloneFields({});
+    if (elements.rcloneRemote) elements.rcloneRemote.value = "";
   }
+  setTaskKind(kind);
   toggleSections();
   openModal(elements.taskModal);
 }
@@ -2146,8 +3099,11 @@ function prefillCronGenerator(expression = "") {
 async function handleFormSubmit(event) {
   event.preventDefault();
   try {
+    const kind = getTaskKind();
     const payload = collectFormData();
-    if (!payload.name || !payload.account || !payload.script_body) {
+    payload.task_kind = kind;
+    let probeFailure = "";
+    if (!payload.name || !payload.account) {
       throw new Error(t("validation.required_fields"));
     }
     if (state.accountLoading) {
@@ -2176,12 +3132,53 @@ async function handleFormSubmit(event) {
         throw new Error(t("validation.script_required"));
       }
     }
+    if (kind === "script") {
+      if (!payload.script_body) {
+        throw new Error(t("validation.required_fields"));
+      }
+    } else {
+      // rclone 任务不写脚本，也不在 rclone 表单里配置前置任务
+      payload.script_body = "";
+      payload.pre_task_ids = [];
+      const config = collectRcloneConfig();
+      if (!config.source) {
+        throw new Error(t("validation.rclone_source_required"));
+      }
+      if (!config.dest) {
+        throw new Error(t("validation.rclone_dest_required"));
+      }
+      // R6：sync 会删目标端多余文件，必须显式确认；后端也要求 confirm_destructive
+      if (config.mode === "sync") {
+        if (!elements.syncConfirm?.checked) {
+          throw new Error(t("validation.sync_confirm_required"));
+        }
+        payload.confirm_destructive = true;
+      }
+      payload.rclone = config;
+      // R4：保存前自检；失败只把原因贴在目标字段下方，不阻止保存
+      const probe = await probeDest(config.dest);
+      if (!probe.ok) probeFailure = probe.message;
+    }
     if (state.editingTaskId) {
       await api("update-task", { id: state.editingTaskId, ...payload });
-      showToast(t("msg.task_updated"));
+      if (probeFailure) {
+        showToast(
+          t("msg.task_saved_probe_failed", { message: probeFailure }),
+          true,
+        );
+      } else {
+        showToast(t("msg.task_updated"));
+      }
     } else {
       await api("create-task", payload);
-      showToast(t("msg.task_created"));
+      if (probeFailure) {
+        showToast(
+          t("msg.task_saved_probe_failed", { message: probeFailure }),
+          true,
+        );
+      } else {
+        showToast(t("msg.task_created"));
+      }
     }
     closeModal(elements.taskModal);
     state.selectedIds.clear();
@@ -2206,6 +3203,7 @@ async function loadTasks({ silent = false } = {}) {
         }
       });
       renderTasks();
+      enrichLatestStats();
     } catch (error) {
       if (!silent) {
         showToast(t("error.load_tasks", { err: error.message }), true);
@@ -2387,9 +3385,25 @@ async function openSettingsModal() {
     Object.entries(settings).forEach(([key, value]) => {
       const field = elements.settingsForm.elements.namedItem(key);
       if (field instanceof HTMLInputElement) {
+        // ha_token 永不回显真实值：只写不读
+        if (key === "ha_token") return;
         field.value = String(value ?? "");
+      } else if (field instanceof HTMLSelectElement) {
+        field.value = String(value ?? "");
+      } else if (field instanceof HTMLTextAreaElement) {
+        field.value = Array.isArray(value)
+          ? value.join("\n")
+          : String(value ?? "");
       }
     });
+    const tokenField = elements.settingsForm.elements.namedItem("ha_token");
+    if (tokenField instanceof HTMLInputElement) {
+      tokenField.value = "";
+      tokenField.placeholder = settings.ha_token_set
+        ? t("field.settings.ha_token_set")
+        : t("field.settings.ha_token_empty");
+    }
+    refreshReportStatus();
   } catch (error) {
     showToast(error.message, true);
   }
@@ -2408,7 +3422,14 @@ async function saveSettings(event) {
     task_timeout: Number(formData.get("task_timeout")),
     condition_timeout: Number(formData.get("condition_timeout")),
     result_log_preview_limit: Number(formData.get("result_log_preview_limit")),
+    ha_base_url: String(formData.get("ha_base_url") || "").trim(),
+    report_mode: String(formData.get("report_mode") || "all"),
+    rclone_bin: String(formData.get("rclone_bin") || "").trim() || "rclone",
+    backup_root_allowlist: splitLines(formData.get("backup_root_allowlist")),
   };
+  // 空 token 表示「不修改」，绝不把 ***set*** 或空串当成新值写回去
+  const token = String(formData.get("ha_token") || "").trim();
+  if (token) payload.ha_token = token;
   try {
     const response = await api("update-settings", payload);
     const pruned = Number(response?.pruned || 0);
@@ -2489,6 +3510,9 @@ function renderResults(results) {
     header.appendChild(metaGroup);
     header.appendChild(actionsGroup);
     card.appendChild(header);
+
+    const statsCard = buildResultStatsCard(result);
+    if (statsCard) card.appendChild(statsCard);
 
     const previewText =
       typeof result.log_preview === "string"
@@ -2649,6 +3673,8 @@ function bindTaskActionEventListeners() {
   buttons.results.addEventListener("click", openResultModal);
   buttons.settings?.addEventListener("click", openSettingsModal);
   buttons.clearResults.addEventListener("click", clearResultHistory);
+  buttons.dryRun?.addEventListener("click", dryRunSelectedTask);
+  elements.reportTestBtn?.addEventListener("click", sendReportTest);
 
   elements.clearPreTasksBtn.addEventListener("click", () => {
     Array.from(elements.preTaskSelect.options).forEach((option) => {
@@ -2679,6 +3705,52 @@ function bindTaskActionEventListeners() {
       loadAccounts({ showError: true }),
     );
   }
+}
+
+function bindRcloneEventListeners() {
+  const kindSwitch = elements.taskForm?.querySelector(".kind-switch");
+  if (kindSwitch) {
+    kindSwitch.addEventListener("change", (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.name === "task_kind") {
+        setTaskKind(target.value);
+      }
+    });
+  }
+
+  elements.rcloneMode?.addEventListener("change", updateRcloneModeUI);
+  elements.syncConfirm?.addEventListener("change", updateSyncConfirmState);
+  document
+    .getElementById("btnReloadRemotes")
+    ?.addEventListener("click", () => loadRemotes({ force: true }));
+  document
+    .getElementById("btnBrowseSource")
+    ?.addEventListener("click", () => {
+      openDirPicker(elements.rcloneSource?.value?.trim() || "/", (path) => {
+        if (elements.rcloneSource) elements.rcloneSource.value = path;
+      });
+    });
+
+  elements.dirPickerUp?.addEventListener("click", () => {
+    loadDirList(dirPickerState.parent || "/");
+  });
+  elements.dirPickerBreadcrumb?.addEventListener("click", (event) => {
+    const target = event.target.closest(".dir-crumb");
+    if (!(target instanceof HTMLElement)) return;
+    loadDirList(target.dataset.path || "/");
+  });
+  elements.dirPickerList?.addEventListener("click", (event) => {
+    const target = event.target.closest(".dir-entry");
+    if (!(target instanceof HTMLElement)) return;
+    loadDirList(target.dataset.path || "/");
+  });
+  elements.dirPickerSelect?.addEventListener("click", () => {
+    const callback = dirPickerState.onSelect;
+    closeModal(elements.dirPickerModal);
+    if (typeof callback === "function") callback(dirPickerState.path);
+  });
+
+  setTaskKind("script");
 }
 
 function bindFormAndModalEventListeners() {
@@ -2758,6 +3830,7 @@ function attachEventListeners() {
   bindTaskActionEventListeners();
   bindFormAndModalEventListeners();
   bindCronGeneratorEventListeners();
+  bindRcloneEventListeners();
 
   bindTaskTemplateSelection();
   bindTemplateManagementEventListeners();
@@ -2804,6 +3877,9 @@ function attachEventListeners() {
     renderTasks();
     updateSortHeaders();
     updateEventTypeOptionLabels();
+    updateRcloneModeUI();
+    renderRemoteOptions(elements.rcloneRemote?.value || "");
+    renderRcloneEnvironment();
   });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
