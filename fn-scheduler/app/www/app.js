@@ -247,6 +247,9 @@ const I18N = {
     "field.settings.result_retention_hint":
       "每个任务最多保留多少条已完成结果，0 表示不限制。",
     "field.settings.task_timeout": "任务超时时间（秒）",
+    "field.settings.rclone_stall_timeout": "备份多久没进度就终止（秒）",
+    "field.settings.rclone_stall_timeout_hint":
+      "rclone 任务不看总时长（大备份跑几小时是正常的），只在这个时间内没有任何进度时才终止。0 表示不限制。",
     "field.settings.task_timeout_hint":
       "脚本执行超过该时间会被终止，0 表示不限制。",
     "field.settings.condition_timeout": "条件脚本超时时间（秒）",
@@ -632,6 +635,9 @@ const I18N = {
     "field.settings.result_retention_hint":
       "Maximum finished results kept per task; 0 means unlimited.",
     "field.settings.task_timeout": "Task timeout (seconds)",
+    "field.settings.rclone_stall_timeout": "Stop backup after no progress for (seconds)",
+    "field.settings.rclone_stall_timeout_hint":
+      "rclone tasks are not limited by total duration (large backups legitimately take hours); they are stopped only after this long with no progress at all. 0 disables the check.",
     "field.settings.task_timeout_hint":
       "A script running longer than this will be terminated; 0 means unlimited.",
     "field.settings.condition_timeout": "Condition script timeout (seconds)",
@@ -3894,6 +3900,7 @@ async function saveSettings(event) {
       formData.get("result_retention_per_task"),
     ),
     task_timeout: Number(formData.get("task_timeout")),
+    rclone_stall_timeout: Number(formData.get("rclone_stall_timeout")),
     condition_timeout: Number(formData.get("condition_timeout")),
     result_log_preview_limit: Number(formData.get("result_log_preview_limit")),
     ha_base_url: String(formData.get("ha_base_url") || "").trim(),

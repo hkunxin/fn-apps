@@ -421,6 +421,11 @@
                 <small data-i18n="field.settings.task_timeout_hint">脚本执行超过该时间会被终止，0 表示不限制。</small>
               </label>
               <label>
+                <span data-i18n="field.settings.rclone_stall_timeout">备份多久没进度就终止（秒）</span>
+                <input type="number" name="rclone_stall_timeout" min="0" step="1" required />
+                <small data-i18n="field.settings.rclone_stall_timeout_hint">rclone 任务不看总时长（大备份跑几小时是正常的），只在这个时间内没有任何进度时才终止。0 表示不限制。</small>
+              </label>
+              <label>
                 <span data-i18n="field.settings.condition_timeout">条件脚本超时时间（秒）</span>
                 <input type="number" name="condition_timeout" min="1" step="1" required />
                 <small data-i18n="field.settings.condition_timeout_hint">条件脚本执行超过该时间会被终止，最小 1 秒。</small>

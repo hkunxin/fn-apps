@@ -71,6 +71,11 @@ ROOT_DIR = Path(__file__).resolve().parent
 DB_LATEST_VERSION = 5
 
 TASK_TIMEOUT = 900
+# rclone 任务不用「总时长」判死：55 GB / 5832 个文件正常要跑 3 小时，按 900 秒一刀切
+# 只会次次失败（2026-11-12 实测：跑到 907 秒被杀，日志「rclone 执行超时（> 900s）」）。
+# 改判「多久没有进度」：--stats 1s 每秒都会输出统计块，真卡死（网络断、目标只读）
+# 才会连续多个块里 bytes_done/files_done 一动不动。15 分钟足够容忍大目录扫描与慢速大文件。
+RCLONE_STALL_TIMEOUT = 900
 CONDITION_TIMEOUT = 60
 MAX_LOOKAHEAD_MINUTES = 60 * 24 * 366  # one leap year
 RESULT_LOG_PREVIEW_LIMIT = 4000
@@ -353,6 +358,7 @@ class SchedulerSettings:
             "result_retention_per_task": RESULT_RETENTION_PER_TASK,
             # spec-040
             "rclone_bin": "rclone",
+            "rclone_stall_timeout": RCLONE_STALL_TIMEOUT,
             "backup_root_allowlist": [],
             "ha_base_url": "",
             "ha_token": "",
@@ -383,6 +389,7 @@ class SchedulerSettings:
             data[key] = value
 
         _read_int("task_timeout", 0)
+        _read_int("rclone_stall_timeout", 0)
         _read_int("condition_timeout", 1)
         _read_int("result_log_preview_limit", 256)
         _read_int("result_retention_per_task", 0)
@@ -484,6 +491,12 @@ class SchedulerSettings:
     def task_timeout(self):
         with self._lock:
             return int(self._data["task_timeout"])
+
+    @property
+    def rclone_stall_timeout(self):
+        """rclone 任务「多久没有进度」判死；0 = 永不判死。"""
+        with self._lock:
+            return int(self._data.get("rclone_stall_timeout") or 0)
 
     @property
     def condition_timeout(self):
@@ -1683,7 +1696,12 @@ class Database:
     def fetch_running_instances(self):
         with self._lock:
             cur = self._conn.execute(
-                "SELECT task_id, started_at FROM task_results WHERE status='running'"
+                """
+                SELECT r.task_id, r.started_at, t.task_kind
+                FROM task_results r
+                LEFT JOIN tasks t ON t.id = r.task_id
+                WHERE r.status='running'
+                """
             )
             return [dict(row) for row in cur.fetchall()]
 
@@ -2227,10 +2245,13 @@ class TaskRunner(threading.Thread):
         preexec_fn, home_dir = self._prepare_account_context()
         env = build_task_environment(self.task, self.trigger_reason, home_dir)
         task_id = int(self.task["id"])
-        execution_timeout = self.settings.task_timeout or None
+        # rclone 不用总时长判死（见 RCLONE_STALL_TIMEOUT 的注释）。
+        # `task_timeout` 只留给脚本任务；rclone 的判据是「多久没有进度」。
+        stall_timeout = self.settings.rclone_stall_timeout
         logger.info(
-            "Running rclone task %s: %s",
+            "Running rclone task %s (stall=%ss): %s",
             task_id,
+            stall_timeout or "off",
             " ".join(argv),
         )
 
@@ -2240,6 +2261,10 @@ class TaskRunner(threading.Thread):
         # 没必要每次都对整个输出重跑正则。
         collected: List[str] = []
         recent: collections.deque = collections.deque(maxlen=60)
+        # 最后一次「进度真的变了」的时刻。注意不能用「有没有输出」当判据：
+        # 卡住时 rclone 仍然每秒打一块统计，只是 bytes/files 一动不动。
+        last_progress_at = [time.monotonic()]
+        last_mark: List[Optional[tuple]] = [None]
 
         def _pump():
             try:
@@ -2254,13 +2279,18 @@ class TaskRunner(threading.Thread):
                     recent.append(line)
                     snapshot = rclone_mod.parse_progress("\n".join(recent))
                     if snapshot:
+                        mark = (snapshot.get("bytes_done"), snapshot.get("files_done"))
+                        if mark != last_mark[0]:
+                            last_mark[0] = mark
+                            last_progress_at[0] = time.monotonic()
                         snapshot["updated_at"] = isoformat(time_now())
                         TaskRunner.set_progress(task_id, snapshot)
             except Exception:  # pylint: disable=broad-except
-                # 进程被超时终止时读流会抛，这是预期路径，不当错误处理
+                # 进程被终止时读流会抛，这是预期路径，不当错误处理
                 pass
 
         reader = None
+        stalled = False
         try:
             process = Popen(
                 argv,
@@ -2273,22 +2303,24 @@ class TaskRunner(threading.Thread):
             self._register_process(task_id, process)
             reader = threading.Thread(target=_pump, daemon=True)
             reader.start()
-            process.wait(timeout=execution_timeout)
+            # 每 5 秒醒一次看进展。进程正常结束就跳出，否则看是否已经「静止」太久。
+            while True:
+                try:
+                    process.wait(timeout=5)
+                    break
+                except TimeoutExpired:
+                    pass
+                if stall_timeout > 0 and (time.monotonic() - last_progress_at[0]) > stall_timeout:
+                    stalled = True
+                    break
+            if stalled:
+                try:
+                    TaskRunner.terminate_task_processes(task_id, grace_seconds=1.0)
+                    process.wait(timeout=5)
+                except Exception:
+                    pass
             # 等读流线程把尾巴收完，否则最后一块统计可能还没进 collected
             reader.join(timeout=5)
-        except TimeoutExpired:
-            try:
-                TaskRunner.terminate_task_processes(task_id, grace_seconds=1.0)
-                if process is not None:
-                    process.wait(timeout=5)
-            except Exception:
-                pass
-            return (
-                f"rclone 执行超时（> {execution_timeout}s），已终止进程树",
-                "failed",
-                None,
-                None,
-            )
         except FileNotFoundError:
             return (
                 f"找不到 rclone（{self.settings.rclone_bin}）。"
@@ -2314,6 +2346,18 @@ class TaskRunner(threading.Thread):
         stats = rclone_mod.parse_stats(text)
         if stats:
             stats["exit_code"] = exit_code
+
+        if stalled:
+            # 被 stall 检测终止：退出码只能说明「被信号杀了」，说不清原因，
+            # 这里换成人能看懂的话，并保留最后一块统计（已传多少是关键信息）。
+            idle = int(time.monotonic() - last_progress_at[0])
+            reason = (
+                f"rclone 连续 {idle} 秒没有任何进度（阈值 {stall_timeout}s），已终止进程树。"
+                "常见原因：目标不可写、网络/远程断开、rclone 卡在等待。"
+            )
+            text = (reason + "\n" + (text or "")).strip()
+            logger.warning("rclone task %s stalled: idle=%ss", task_id, idle)
+            return text, "failed", exit_code, stats
 
         status = rclone_mod.classify_exit(exit_code)
         if dry_run and status != rclone_mod.STATUS_FAILED:
@@ -2607,6 +2651,11 @@ class SchedulerEngine:
         if not timeout or timeout <= 0:
             return
         for running in self.db.fetch_running_instances():
+            # rclone 任务不看总时长：55 GB 的备份跑 3 小时是正常的，
+            # 用 900 秒一刀切只会次次失败（2026-11-12 实测）。它们由
+            # `rclone_stall_timeout`（多久没进度）判死，不在这里管。
+            if (running.get("task_kind") or TASK_KIND_SCRIPT) == TASK_KIND_RCLONE:
+                continue
             task_id = int(running["task_id"])
             started_at = parse_iso(running["started_at"])
             if not started_at:
