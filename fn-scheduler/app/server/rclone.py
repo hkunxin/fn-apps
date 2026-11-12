@@ -89,7 +89,7 @@ _SIZE_INPUT = re.compile(r"^[0-9]+(?:\.[0-9]+)?\s?(?:[KMGTPE](?:i)?(?:B)?|B)?$",
 _DURATION_TOKEN = re.compile(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h|d|w|M|y)")
 _CLOCK_DURATION = re.compile(r"^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$")
 
-_REMOTE_NAME = re.compile(r"^[A-Za-z0-9_.\- ]+$")
+_REMOTE_NAME = re.compile(r"^[^\[\]:/\\\r\n]+$")
 
 
 class ConfigError(ValueError):
@@ -223,8 +223,8 @@ def validate_dest(dest: Any) -> Tuple[str, str]:
     remote = remote.strip()
     if not remote:
         raise ConfigError("invalid_dest", "目标缺少 remote 名")
-    if not _REMOTE_NAME.match(remote):
-        raise ConfigError("invalid_remote", "remote 名只允许字母、数字、空格和 _ . -")
+    if not _REMOTE_NAME.match(remote) or remote.startswith("-"):
+        raise ConfigError("invalid_remote", "remote 名不能包含 [ ] : / \\ 或换行，也不能以 - 开头")
     path = path.strip()
     if ".." in path.replace("\\", "/").split("/"):
         raise ConfigError("path_traversal", "目标路径不允许包含 ..")
@@ -833,6 +833,16 @@ SECRET_FIELDS = frozenset(
 # 否则写进去的配置 rclone 读不到（实测：webdav 缺 url 时只会报 `unsupported
 # protocol scheme ""`，很难从报错反推是字段名错了）。
 REMOTE_TYPES: Dict[str, Dict[str, Any]] = {
+    # 本地目录也做成一个 remote：`sync`/`copy` 的目标一律是 `remote:路径`，
+    # 有了这一种就能「本地 → 本地」（同机另一个盘、挂载的移动硬盘、测试用临时目录）。
+    # 实测 `[name]\ntype = local` 能被 listremotes/lsd/copy 正常识别。
+    # 注意：`sync` 到本地目录是**直接删本机文件**，比删远端更不可逆，确认框不能省。
+    "local": {
+        "label": "本机目录（同一台 NAS 上的另一个目录 / 挂载盘）",
+        "note": "这种类型不需要填任何参数：保存后用它时写成「名字:/绝对路径」即可。"
+        "sync 到本机目录会直接删除本机多余文件，请谨慎使用。",
+        "fields": [],
+    },
     "smb": {
         "label": "SMB / CIFS（Windows 共享、群晖、fnOS）",
         "fields": [
@@ -869,28 +879,39 @@ REMOTE_TYPES: Dict[str, Dict[str, Any]] = {
 
 def remote_type_specs() -> List[Dict[str, Any]]:
     """给前端用的后端与字段定义（不含任何用户数据）。"""
-    return [
-        {"type": name, "label": spec["label"], "fields": [dict(f) for f in spec["fields"]]}
-        for name, spec in REMOTE_TYPES.items()
-    ]
+    specs: List[Dict[str, Any]] = []
+    for name, spec in REMOTE_TYPES.items():
+        item: Dict[str, Any] = {
+            "type": name,
+            "label": spec["label"],
+            "fields": [dict(f) for f in spec["fields"]],
+        }
+        if spec.get("note"):
+            item["note"] = spec["note"]
+        specs.append(item)
+    return specs
 
 
 def validate_remote_name(name: Any) -> str:
     """remote 名（rclone.conf 的 section 名）。
 
-    允许字母数字与 `_.- `（rclone 自己允许空格），但必须以字母数字开头，
-    且不能含 `:`——`:` 是 `remote:path` 的分隔符，含了以后路径永远解析错。
+    允许中文等非 ASCII 字符——实测 `[本机]` 能被 rclone 正常识别，而中文用户
+    给 NAS 建一个「本机」「相册盘」是很自然的事。
+    禁的是会破坏 INI 结构或路径解析的字符：`[` `]` 会切断 section 头，
+    `:` 是 `remote:path` 的分隔符（含了以后路径永远解析错），换行会注入新行。
     """
     text = _text(name)
     if not text:
         raise ConfigError("invalid_remote_name", "remote 名称不能为空")
     if len(text) > 64:
         raise ConfigError("invalid_remote_name", "remote 名称不能超过 64 个字符")
-    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.\- ]*$", text):
+    if not _REMOTE_NAME.match(text):
         raise ConfigError(
             "invalid_remote_name",
-            "remote 名称只能用字母、数字、空格和 _ . -，且必须以字母或数字开头",
+            "remote 名称不能包含 [ ] : / \\ 或换行",
         )
+    if text.startswith("-"):
+        raise ConfigError("invalid_remote_name", "remote 名称不能以 - 开头")
     return text
 
 
@@ -908,7 +929,7 @@ def normalize_remote_params(remote_type: Any, params: Any) -> Dict[str, str]:
     if spec is None:
         raise ConfigError(
             "invalid_remote_type",
-            "只支持 smb / webdav / sftp 三种后端",
+            "只支持 local / smb / webdav / sftp 四种后端",
         )
     if params is not None and not isinstance(params, dict):
         raise ConfigError("invalid_remote_params", "remote 字段必须是对象")

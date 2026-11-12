@@ -1849,3 +1849,15 @@ label.checkbox-option-block {
   font-size: 12px;
   color: var(--danger);
 }
+
+/* 没有任何字段的后端（如「本机目录」）用一段说明代替空白表单 */
+.remote-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.6;
+}

@@ -2696,6 +2696,13 @@ function renderRemoteFields() {
   const spec = currentRemoteSpec();
   els.fields.innerHTML = "";
   if (!spec) return;
+  if (spec.note) {
+    // 像「本机目录」这种后端没有任何字段，光留一片空白会让人以为表单没加载出来
+    const note = document.createElement("p");
+    note.className = "remote-note";
+    note.textContent = spec.note;
+    els.fields.appendChild(note);
+  }
   spec.fields.forEach((field) => {
     const label = document.createElement("label");
     const title = document.createElement("span");
@@ -2826,7 +2833,12 @@ function bindRemoteManagerEventListeners() {
   });
   els.form?.addEventListener("submit", handleRemoteSubmit);
   els.deleteBtn?.addEventListener("click", deleteCurrentRemote);
-  els.cancelBtn?.addEventListener("click", () => resetRemoteForm());
+  els.cancelBtn?.addEventListener("click", () => {
+    // 「取消」要真的把面板关掉。原来只 reset 表单，面板留在原地，
+    // 看起来像点了没反应（填一半想放弃时尤其困惑）。
+    resetRemoteForm();
+    els.modal?.classList.add("hidden");
+  });
 }
 
 function renderTasks() {

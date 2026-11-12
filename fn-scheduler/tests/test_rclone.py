@@ -492,14 +492,44 @@ host = 1.2.3.4
 class RemoteConfigTest(unittest.TestCase):
     """R15：Web UI 建 remote 的纯逻辑层（不碰文件系统、不需要真 rclone）。"""
 
-    def test_types_cover_smb_webdav_sftp(self):
+    def test_types_cover_local_smb_webdav_sftp(self):
         kinds = [spec["type"] for spec in rclone.remote_type_specs()]
-        self.assertEqual(sorted(kinds), ["sftp", "smb", "webdav"])
+        self.assertEqual(sorted(kinds), ["local", "sftp", "smb", "webdav"])
+
+    def test_local_type_needs_no_fields(self):
+        """「本机目录」后端没有任何字段：只写 `type = local` 就是一条完整配置。
+
+        实测 `[name]\ntype = local` 能被 listremotes / lsd / copy 正常识别，
+        所以本地到本地不必去连自己的 SMB。
+        """
+        specs = {spec["type"]: spec for spec in rclone.remote_type_specs()}
+        local = specs["local"]
+        self.assertEqual(local["fields"], [])
+        self.assertIn("绝对路径", local["note"])
+        self.assertEqual(rclone.normalize_remote_params("local", {}), {"type": "local"})
+        # 前端可能把表单字段一股脑传上来，未声明的键必须被丢掉
+        self.assertEqual(
+            rclone.normalize_remote_params("local", {"host": "1.2.3.4", "pass": "x"}),
+            {"type": "local"},
+        )
 
     def test_remote_name_rules(self):
         self.assertEqual(rclone.validate_remote_name("  photos "), "photos")
         self.assertEqual(rclone.validate_remote_name("my nas 2"), "my nas 2")
-        for bad in ("", "   ", ":nas", "nas:path", "-nas", "nas\n[evil]"):
+        for bad in ("", "   ", ":nas", "nas:path", "-nas", "nas\n[evil]", "a[b", "a/b", "a\\b"):
+            with self.assertRaises(rclone.ConfigError, msg=bad):
+                rclone.validate_remote_name(bad)
+
+    def test_remote_name_allows_chinese(self):
+        """实测 `[本机]\ntype = local` 能被 rclone 正常识别，所以中文名不该被拦。
+
+        拦的只应该是会破坏 INI 结构或路径解析的字符（`[` `]` `:` 换行）。
+        """
+        self.assertEqual(rclone.validate_remote_name("本机"), "本机")
+        self.assertEqual(rclone.validate_remote_name("相册盘"), "相册盘")
+        remote, path = rclone.validate_dest("本机:/vol1/1000/backup")
+        self.assertEqual((remote, path), ("本机", "/vol1/1000/backup"))
+        for bad in ("本机:x", "本[机", "本]机", "本机/盘"):
             with self.assertRaises(rclone.ConfigError, msg=bad):
                 rclone.validate_remote_name(bad)
 
