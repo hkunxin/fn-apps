@@ -2264,7 +2264,10 @@ class TaskRunner(threading.Thread):
         # 最后一次「进度真的变了」的时刻。注意不能用「有没有输出」当判据：
         # 卡住时 rclone 仍然每秒打一块统计，只是 bytes/files 一动不动。
         last_progress_at = [time.monotonic()]
-        last_mark: List[Optional[tuple]] = [None]
+        # 存**历史最大值**而不是「上一次的快照」：卡死时 rclone 会偶发打出
+        # `Transferred: 0 B / …` 这类块（重试/切换文件时），用「最近值」比对
+        # 会被这种抖动骗过、把计时器一次次重置——实测 10 小时没触发过（2026-11-13）。
+        best_mark: List[tuple] = [(0, 0)]
 
         def _pump():
             try:
@@ -2279,9 +2282,13 @@ class TaskRunner(threading.Thread):
                     recent.append(line)
                     snapshot = rclone_mod.parse_progress("\n".join(recent))
                     if snapshot:
-                        mark = (snapshot.get("bytes_done"), snapshot.get("files_done"))
-                        if mark != last_mark[0]:
-                            last_mark[0] = mark
+                        done_bytes = snapshot.get("bytes_done") or 0
+                        done_files = snapshot.get("files_done") or 0
+                        if done_bytes > best_mark[0][0] or done_files > best_mark[0][1]:
+                            best_mark[0] = (
+                                max(done_bytes, best_mark[0][0]),
+                                max(done_files, best_mark[0][1]),
+                            )
                             last_progress_at[0] = time.monotonic()
                         snapshot["updated_at"] = isoformat(time_now())
                         TaskRunner.set_progress(task_id, snapshot)
@@ -3392,6 +3399,26 @@ def stop_task(task_id):
             status=HTTPStatus.CONFLICT,
         )
         return
+
+    # 进程杀掉之后，正常情况是 TaskRunner 线程自己往下走完 finally 去结案。
+    # 但实测有一次：跑了 10 小时的任务被杀后，DB 里状态一直停在 running，
+    # 调度线程每秒刷 "still running, skip"，用户看到「终止了但还在跑」，
+    # 而且这个任务再也起不来（has_running_instance 一直为真）。
+    # 所以这里加一道保险：给执行线程 10 秒，仍不收尾就由本接口强制结案。
+    for _ in range(20):
+        if not ctx.db.has_running_instance(task_id):
+            break
+        time.sleep(0.5)
+    if ctx.db.has_running_instance(task_id):
+        forced = ctx.db.finalize_stale_running_instances(
+            task_id,
+            reason="stopped by user (executor did not finalize in time)",
+        )
+        logger.warning(
+            "stop-task %s: executor did not finalize in 10s, forced %s record(s)",
+            task_id,
+            forced,
+        )
     json_response({"stopped": True, "summary": summary})
 
 
