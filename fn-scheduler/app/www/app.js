@@ -1723,7 +1723,16 @@ const rcloneState = {
   remotes: [],
   detail: null,
   message: "",
+  // 当前已加载的是哪个账号的 remote：换账号必须重拉，否则会拿着别人的列表去填下拉
+  account: null,
 };
+
+/** 任务表单当前选的账号。remote 是分账号的，列 remote / 探目标都要带上它。 */
+function currentTaskAccount() {
+  return (
+    elements.taskForm?.querySelector('[name="account"]')?.value || ""
+  ).trim();
+}
 
 const dirPickerState = {
   path: "/",
@@ -1967,6 +1976,12 @@ function renderRcloneEnvironment() {
 }
 
 async function loadRemotes({ force = false } = {}) {
+  const account = currentTaskAccount();
+  // 账号换了就当作没加载过：remote 是分账号的，拿着 root 的列表去填 hkx 的下拉
+  // 会显示成「没有 remote」或者列出跑不通的 remote（2026-11-12 实测）。
+  if (rcloneState.account !== account) {
+    rcloneState.loaded = false;
+  }
   if (rcloneState.loading) return;
   if (rcloneState.loaded && !force) {
     renderRemoteOptions(elements.rcloneRemote?.value || "");
@@ -1976,14 +1991,19 @@ async function loadRemotes({ force = false } = {}) {
   rcloneState.loading = true;
   renderRcloneEnvironment();
   try {
-    const payload = await api("list-remotes");
+    const payload = await api(
+      "list-remotes",
+      account ? { account } : {},
+    );
     rcloneState.remotes = Array.isArray(payload?.remotes) ? payload.remotes : [];
     rcloneState.detail = payload?.rclone || null;
     rcloneState.message = payload?.message || payload?.warning || "";
+    rcloneState.account = account;
   } catch (error) {
     rcloneState.remotes = [];
     rcloneState.detail = { available: false, message: error.message };
     rcloneState.message = error.message;
+    rcloneState.account = account;
   } finally {
     rcloneState.loading = false;
     rcloneState.loaded = true;
@@ -2078,7 +2098,8 @@ function setProbeMessage(text, tone) {
 async function probeDest(dest) {
   setProbeMessage(t("rclone.probe.checking"), "muted");
   try {
-    const payload = await api("probe-remote", { dest });
+    const account = currentTaskAccount();
+    const payload = await api("probe-remote", account ? { dest, account } : { dest });
     if (payload?.ok) {
       setProbeMessage(t("rclone.probe.ok"), "ok");
       return { ok: true, message: "" };
@@ -4198,6 +4219,10 @@ function bindFormAndModalEventListeners() {
   elements.taskForm.addEventListener("submit", handleFormSubmit);
   elements.settingsForm?.addEventListener("submit", saveSettings);
   bindRemoteManagerEventListeners();
+  // 换账号要重拉 remote：不同账号的配置是两份文件，列表不一样
+  elements.accountSelect?.addEventListener("change", () => {
+    if (getTaskKind() === "rclone") loadRemotes({ force: true });
+  });
   document
     .querySelectorAll("[data-close]")
     .forEach((btn) => btn.addEventListener("click", closeModalOnOverlay));

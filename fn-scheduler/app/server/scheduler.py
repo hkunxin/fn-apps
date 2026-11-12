@@ -3525,12 +3525,21 @@ def _check_backup_allowlist(payload):
     )
 
 
-def _run_rclone(args, timeout=20):
-    """跑一条**只读**的 rclone 命令，返回 (exit_code, 合并输出)。失败时 exit_code 为 None。"""
+def _run_rclone(args, timeout=20, config_path=None):
+    """跑一条**只读**的 rclone 命令，返回 (exit_code, 合并输出)。失败时 exit_code 为 None。
+
+    `config_path` 用来指定**某个账号**的 rclone.conf。remote 是分账号的：不指定就会
+    读服务账号（root）的配置，于是「在界面里给 hkx 建好了 remote，任务表单的下拉却还是空的」
+    ——2026-11-12 实测踩到，别再把它当默认行为。
+    """
     binary = get_context().settings.rclone_bin or "rclone"
+    argv = [binary]
+    if config_path:
+        argv.extend(["--config", config_path])
+    argv.extend(list(args))
     try:
         proc = run(
-            [binary] + list(args),
+            argv,
             stdout=PIPE,
             stderr=STDOUT,
             text=True,
@@ -3571,19 +3580,54 @@ def rclone_capability():
     json_response({"ok": bool(detail.get("available")), "rclone": detail})
 
 
-def list_remotes():
-    """返回 remote 的**名称与类型**。绝不读取 rclone.conf 里的凭据（R3）。"""
-    rc, output = _run_rclone(["listremotes", "--long"])
+def list_remotes(payload=None):
+    """返回 remote 的**名称与类型**。绝不读取 rclone.conf 里的凭据（R3）。
+
+    给了 `account` 就按**该账号**的配置列（remote 是分账号的，任务按账号执行）；
+    没给则退回按服务账号列，仅为兼容旧调用。
+    """
+    payload = payload or {}
+    account = str(payload.get("account") or "").strip()
     detail = _capability_payload()
+
+    if account:
+        try:
+            text, path = _read_remote_config(account)
+        except ValueError as exc:
+            json_response(
+                {"ok": False, "remotes": [], "rclone": detail, "message": str(exc)}
+            )
+            return
+        remotes = [
+            {"name": name, "type": values.get("type", "")}
+            for name, values in rclone_mod.parse_config_sections(text).items()
+        ]
+        remotes.sort(key=lambda item: item["name"].lower())
+        message = "" if remotes else (
+            "这个账号下还没有 remote：点右边的「管理」新建一个（支持 SMB / WebDAV / SFTP）。"
+            "想手工配置的话，请用该账号执行、不要加 sudo——配置会写到 root 下，任务执行时读不到。"
+        )
+        json_response(
+            {
+                "ok": True,
+                "account": account,
+                "path": str(path),
+                "remotes": remotes,
+                "rclone": detail,
+                "message": message,
+                "warning": "",
+            }
+        )
+        return
+
+    rc, output = _run_rclone(["listremotes", "--long"])
     if rc is None:
         json_response({"ok": False, "remotes": [], "rclone": detail, "message": output})
         return
     remotes = rclone_mod.parse_remotes(output)
-    # 提示必须写清「用哪个账号」：任务是以任务里选定的账号执行的，
-    # `sudo rclone config` 会把配置写到 root 下，而任务跑起来照样找不到（实测）。
     message = "" if remotes else (
-        "还没有配置任何 remote：请在 NAS 上用这个任务选定的账号执行 rclone config 添加"
-        "（不要加 sudo，否则配置会写到 root 下，任务执行时读不到）"
+        "还没有配置任何 remote：点右边的「管理」新建一个（支持 SMB / WebDAV / SFTP）。"
+        "想手工配置的话，请用该账号执行、不要加 sudo——配置会写到 root 下，任务执行时读不到。"
     )
     json_response(
         {
@@ -3597,7 +3641,12 @@ def list_remotes():
 
 
 def probe_remote(payload):
-    """保存前自检目标是否可达（R4）。"""
+    """保存前自检目标是否可达（R4）。
+
+    `account` 给定时用该账号的配置去探——remote 是分账号的，用服务账号（root）的配置
+    去探，明明建好了也会报 `remote_not_found`。
+    """
+    account = str(payload.get("account") or "").strip()
     dest = str(payload.get("dest") or "").strip()
     if dest:
         try:
@@ -3612,8 +3661,20 @@ def probe_remote(payload):
             json_response({"ok": False, "code": "invalid_remote", "message": "缺少 remote"})
             return
 
+    config_path = None
+    if account:
+        try:
+            _text, config_file = _read_remote_config(account)
+        except ValueError as exc:
+            json_response({"ok": False, "code": "invalid_account", "message": str(exc)})
+            return
+        if config_file.exists():
+            config_path = str(config_file)
+
     target = f"{remote}:{path}"
-    rc, output = _run_rclone(["lsd", target, "--max-depth", "1"], timeout=25)
+    rc, output = _run_rclone(
+        ["lsd", target, "--max-depth", "1"], timeout=25, config_path=config_path
+    )
     if rc is None:
         json_response({"ok": False, "code": "unavailable", "message": output, "target": target})
         return
@@ -4037,7 +4098,7 @@ def dispatch():
             fs_write(payload)
         # ---- spec-040 ----
         elif action == "list-remotes":
-            list_remotes()
+            list_remotes(payload)
         elif action == "rclone-capability":
             rclone_capability()
         elif action == "probe-remote":
